@@ -29,6 +29,7 @@ lazy_static! {
         expiry_height: block::Height(0),
         inputs: Vec::new(),
         outputs: Vec::new(),
+        tze: tze::Bundle::default(),
         sapling_shielded_data: None,
         orchard_shielded_data: None,
     };

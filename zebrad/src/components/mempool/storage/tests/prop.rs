@@ -15,7 +15,7 @@ use zebra_chain::{
     serialization::AtLeastOne,
     sprout,
     transaction::{self, JoinSplitData, Transaction, UnminedTxId, VerifiedUnminedTx},
-    transparent, LedgerState,
+    transparent, tze, LedgerState,
 };
 
 use crate::components::mempool::{

@@ -15,6 +15,7 @@ use zebra_chain::{
     serialization::ZcashDeserializeInto,
     sprout::JoinSplit,
     transaction::{JoinSplitData, LockTime, Transaction},
+    tze,
 };
 
 use crate::{
@@ -1032,6 +1033,7 @@ fn transaction_v4_with_joinsplit_data(
     Transaction::V4 {
         inputs: Vec::new(),
         outputs: Vec::new(),
+        tze: tze::Bundle::default(),
         lock_time: LockTime::min_lock_time_timestamp(),
         expiry_height: Height(0),
         joinsplit_data,
@@ -1100,6 +1102,7 @@ fn transaction_v4_with_sapling_shielded_data(
     Transaction::V4 {
         inputs: Vec::new(),
         outputs: Vec::new(),
+        tze: tze::Bundle::default(),
         lock_time: LockTime::min_lock_time_timestamp(),
         expiry_height: Height(0),
         joinsplit_data: None,
@@ -1137,6 +1140,7 @@ fn transaction_v5_with_orchard_shielded_data(
         network_upgrade: Nu5,
         inputs: Vec::new(),
         outputs: Vec::new(),
+        tze: tze::Bundle::default(),
         lock_time: LockTime::min_lock_time_timestamp(),
         expiry_height: Height(0),
         sapling_shielded_data: None,

@@ -1,5 +1,6 @@
 //! Asynchronous verification of transactions.
 
+use std::convert::TryFrom;
 use std::{
     collections::{HashMap, HashSet},
     future::Future,
@@ -40,6 +41,7 @@ use zebra_chain::{
 use zebra_node_services::mempool;
 use zebra_script::{CachedFfiTransaction, Sigops};
 use zebra_state as zs;
+use zebra_tze_stwo::{self, VerifyError};
 
 use crate::{error::TransactionError, groth16::DescriptionWrapper, primitives, script, BoxError};
 
@@ -77,6 +79,9 @@ const MEMPOOL_OUTPUT_LOOKUP_TIMEOUT: std::time::Duration = std::time::Duration::
 /// This should be long enough for the mempool service's `Downloads` to finish processing the
 /// response from the transaction verifier.
 const POLL_MEMPOOL_DELAY: std::time::Duration = Duration::from_millis(50);
+
+const STWO_CAIRO_EXTENSION_ID: u64 = zebra_tze_stwo::STWO_CAIRO_EXTENSION_ID;
+const STWO_CAIRO_SUPPORTED_MODES: &[u64] = zebra_tze_stwo::STWO_CAIRO_SUPPORTED_MODES;
 
 /// Asynchronous transaction verification.
 ///
@@ -964,6 +969,7 @@ where
         let nu = request.upgrade(network);
 
         Self::verify_v5_transaction_network_upgrade(&transaction, nu)?;
+        check::tze_bundle_sanity_checks(&transaction)?;
 
         let sapling_bundle = cached_ffi_transaction.sighasher().sapling_bundle();
         let orchard_bundle = cached_ffi_transaction.sighasher().orchard_bundle();
@@ -978,7 +984,8 @@ where
             cached_ffi_transaction,
         )?
         .and(Self::verify_sapling_bundle(sapling_bundle, &sighash))
-        .and(Self::verify_orchard_bundle(orchard_bundle, &sighash)))
+        .and(Self::verify_orchard_bundle(orchard_bundle, &sighash))
+        .and(Self::verify_tze_bundle(&transaction)?))
     }
 
     /// Verifies if a V5 `transaction` is supported by `network_upgrade`.
@@ -1224,6 +1231,47 @@ where
         }
 
         async_checks
+    }
+
+    /// Verifies TZE bundles using the prototype STWO stub.
+    fn verify_tze_bundle(transaction: &Transaction) -> Result<AsyncChecks, TransactionError> {
+        if transaction.has_tze_inputs() || transaction.has_tze_outputs() {
+            tracing::debug!(
+                "proto-tze: verifying transaction with {} TZE inputs and {} TZE outputs",
+                transaction.tze_inputs().len(),
+                transaction.tze_outputs().len()
+            );
+        }
+
+        for input in transaction.tze_inputs() {
+            if input.witness.extension_id.0 != STWO_CAIRO_EXTENSION_ID {
+                continue;
+            }
+
+            if !STWO_CAIRO_SUPPORTED_MODES.contains(&input.witness.mode.0) {
+                return Err(TransactionError::TzeUnsupportedMode {
+                    extension: u32::try_from(input.witness.extension_id.0).unwrap_or(u32::MAX),
+                    mode: u32::try_from(input.witness.mode.0).unwrap_or(u32::MAX),
+                });
+            }
+
+            match zebra_tze_stwo::verify_stwo_cairo(
+                input.witness.extension_id.0,
+                input.witness.mode.0,
+                &input.witness,
+                &input.witness,
+            ) {
+                Ok(()) => {}
+                Err(VerifyError::UnsupportedMode { mode }) => {
+                    return Err(TransactionError::TzeUnsupportedMode {
+                        extension: u32::try_from(input.witness.extension_id.0).unwrap_or(u32::MAX),
+                        mode: u32::try_from(mode).unwrap_or(u32::MAX),
+                    })
+                }
+            }
+        }
+
+        Ok(AsyncChecks::new())
     }
 }
 

@@ -6857,6 +6857,7 @@ dependencies = [
  "zebra-script",
  "zebra-state",
  "zebra-test",
+ "zebra-tze-stwo",
 ]
 
 [[package]]
@@ -7052,6 +7053,15 @@ dependencies = [
  "tracing",
  "tracing-error",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "zebra-tze-stwo"
+version = "0.1.0"
+dependencies = [
+ "thiserror 1.0.69",
+ "tracing",
+ "zebra-chain",
 ]
 
 [[package]]

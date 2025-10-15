@@ -39,6 +39,7 @@ pub mod sprout;
 pub mod subtree;
 pub mod transaction;
 pub mod transparent;
+pub mod tze;
 pub mod value_balance;
 pub mod work;
 

@@ -31,6 +31,7 @@ use zebra_chain::{
         zip317, Hash, HashType, JoinSplitData, LockTime, Transaction,
     },
     transparent::{self, CoinbaseData, CoinbaseSpendRestriction},
+    tze,
 };
 
 use zebra_node_services::mempool;
@@ -271,6 +272,7 @@ async fn mempool_request_with_present_input_is_accepted() {
     let tx = Transaction::V4 {
         inputs: vec![input],
         outputs: vec![output],
+        tze: tze::Bundle::default(),
         lock_time: LockTime::unlocked(),
         expiry_height: height,
         joinsplit_data: None,
@@ -338,6 +340,7 @@ async fn mempool_request_with_invalid_lock_time_is_rejected() {
     let tx = Transaction::V4 {
         inputs: vec![input],
         outputs: vec![output],
+        tze: tze::Bundle::default(),
         lock_time: LockTime::max_lock_time_timestamp(),
         expiry_height: height,
         joinsplit_data: None,
@@ -417,6 +420,7 @@ async fn mempool_request_with_unlocked_lock_time_is_accepted() {
     let tx = Transaction::V4 {
         inputs: vec![input],
         outputs: vec![output],
+        tze: tze::Bundle::default(),
         lock_time: LockTime::unlocked(),
         expiry_height: height,
         joinsplit_data: None,
@@ -487,6 +491,7 @@ async fn mempool_request_with_lock_time_max_sequence_number_is_accepted() {
     let tx = Transaction::V4 {
         inputs: vec![input],
         outputs: vec![output],
+        tze: tze::Bundle::default(),
         lock_time: LockTime::max_lock_time_timestamp(),
         expiry_height: height,
         joinsplit_data: None,
@@ -554,6 +559,7 @@ async fn mempool_request_with_past_lock_time_is_accepted() {
     let tx = Transaction::V4 {
         inputs: vec![input],
         outputs: vec![output],
+        tze: tze::Bundle::default(),
         lock_time: LockTime::min_lock_time_timestamp(),
         expiry_height: height,
         joinsplit_data: None,
@@ -635,6 +641,7 @@ async fn mempool_request_with_unmined_output_spends_is_accepted() {
     let tx = Transaction::V4 {
         inputs: vec![input],
         outputs: vec![output],
+        tze: tze::Bundle::default(),
         lock_time: LockTime::min_lock_time_timestamp(),
         expiry_height: height,
         joinsplit_data: None,
@@ -754,6 +761,7 @@ async fn skips_verification_of_block_transactions_in_mempool() {
         network_upgrade: NetworkUpgrade::Nu6,
         inputs: vec![input],
         outputs: vec![output],
+        tze: tze::Bundle::default(),
         lock_time: LockTime::min_lock_time_timestamp(),
         expiry_height: height,
         sapling_shielded_data: None,
@@ -927,6 +935,7 @@ async fn mempool_request_with_immature_spend_is_rejected() {
     let tx = Transaction::V4 {
         inputs: vec![input],
         outputs: vec![output],
+        tze: tze::Bundle::default(),
         lock_time: LockTime::min_lock_time_timestamp(),
         expiry_height: height,
         joinsplit_data: None,
@@ -1040,6 +1049,7 @@ async fn mempool_request_with_transparent_coinbase_spend_is_accepted_on_regtest(
         network_upgrade: NetworkUpgrade::Nu6,
         inputs: vec![input],
         outputs: vec![output],
+        tze: tze::Bundle::default(),
         lock_time: LockTime::min_lock_time_timestamp(),
         expiry_height: height,
         sapling_shielded_data: None,
@@ -1132,6 +1142,7 @@ async fn state_error_converted_correctly() {
     let tx = Transaction::V4 {
         inputs: vec![input],
         outputs: vec![output],
+        tze: tze::Bundle::default(),
         lock_time: LockTime::unlocked(),
         expiry_height: height,
         joinsplit_data: None,
@@ -1327,6 +1338,7 @@ async fn v4_transaction_with_transparent_transfer_is_accepted() {
     let transaction = Transaction::V4 {
         inputs: vec![input],
         outputs: vec![output],
+        tze: tze::Bundle::default(),
         lock_time: LockTime::Height(block::Height(0)),
         expiry_height: (transaction_block_height + 1).expect("expiry height is too large"),
         joinsplit_data: None,
@@ -1379,6 +1391,7 @@ async fn v4_transaction_with_last_valid_expiry_height() {
     let transaction = Transaction::V4 {
         inputs: vec![input],
         outputs: vec![output],
+        tze: tze::Bundle::default(),
         lock_time: LockTime::unlocked(),
         expiry_height: block_height,
         joinsplit_data: None,
@@ -1426,6 +1439,7 @@ async fn v4_coinbase_transaction_with_low_expiry_height() {
     let transaction = Transaction::V4 {
         inputs: vec![input],
         outputs: vec![output],
+        tze: tze::Bundle::default(),
         lock_time: LockTime::unlocked(),
         expiry_height,
         joinsplit_data: None,
@@ -1475,6 +1489,7 @@ async fn v4_transaction_with_too_low_expiry_height() {
     let transaction = Transaction::V4 {
         inputs: vec![input],
         outputs: vec![output],
+        tze: tze::Bundle::default(),
         lock_time: LockTime::unlocked(),
         expiry_height,
         joinsplit_data: None,
@@ -1527,6 +1542,7 @@ async fn v4_transaction_with_exceeding_expiry_height() {
     let transaction = Transaction::V4 {
         inputs: vec![input],
         outputs: vec![output],
+        tze: tze::Bundle::default(),
         lock_time: LockTime::unlocked(),
         expiry_height,
         joinsplit_data: None,
@@ -1582,6 +1598,7 @@ async fn v4_coinbase_transaction_with_exceeding_expiry_height() {
     let transaction = Transaction::V4 {
         inputs: vec![input],
         outputs: vec![output],
+        tze: tze::Bundle::default(),
         lock_time: LockTime::unlocked(),
         expiry_height,
         joinsplit_data: None,
@@ -1629,6 +1646,7 @@ async fn v4_coinbase_transaction_is_accepted() {
     let transaction = Transaction::V4 {
         inputs: vec![input],
         outputs: vec![output],
+        tze: tze::Bundle::default(),
         lock_time: LockTime::Height(block::Height(0)),
         expiry_height: transaction_block_height,
         joinsplit_data: None,
@@ -1688,6 +1706,7 @@ async fn v4_transaction_with_transparent_transfer_is_rejected_by_the_script() {
     let transaction = Transaction::V4 {
         inputs: vec![input],
         outputs: vec![output],
+        tze: tze::Bundle::default(),
         lock_time: LockTime::Height(block::Height(0)),
         expiry_height: (transaction_block_height + 1).expect("expiry height is too large"),
         joinsplit_data: None,
@@ -1745,6 +1764,7 @@ async fn v4_transaction_with_conflicting_transparent_spend_is_rejected() {
     let transaction = Transaction::V4 {
         inputs: vec![input.clone(), input.clone()],
         outputs: vec![output],
+        tze: tze::Bundle::default(),
         lock_time: LockTime::Height(block::Height(0)),
         expiry_height: (transaction_block_height + 1).expect("expiry height is too large"),
         joinsplit_data: None,
@@ -1948,6 +1968,7 @@ async fn v5_transaction_with_transparent_transfer_is_accepted() {
     let transaction = Transaction::V5 {
         inputs: vec![input],
         outputs: vec![output],
+        tze: tze::Bundle::default(),
         lock_time: LockTime::Height(block::Height(0)),
         expiry_height: (transaction_block_height + 1).expect("expiry height is too large"),
         sapling_shielded_data: None,
@@ -2002,6 +2023,7 @@ async fn v5_transaction_with_last_valid_expiry_height() {
     let transaction = Transaction::V5 {
         inputs: vec![input],
         outputs: vec![output],
+        tze: tze::Bundle::default(),
         lock_time: LockTime::unlocked(),
         expiry_height: block_height,
         sapling_shielded_data: None,
@@ -2048,6 +2070,7 @@ async fn v5_coinbase_transaction_expiry_height() {
     let transaction = Transaction::V5 {
         inputs: vec![input],
         outputs: vec![output],
+        tze: tze::Bundle::default(),
         lock_time: LockTime::unlocked(),
         expiry_height: block_height,
         sapling_shielded_data: None,
@@ -2196,6 +2219,7 @@ async fn v5_transaction_with_too_low_expiry_height() {
     let transaction = Transaction::V5 {
         inputs: vec![input],
         outputs: vec![output],
+        tze: tze::Bundle::default(),
         lock_time: LockTime::unlocked(),
         expiry_height,
         sapling_shielded_data: None,
@@ -2245,6 +2269,7 @@ async fn v5_transaction_with_exceeding_expiry_height() {
     let transaction = Transaction::V5 {
         inputs: vec![input],
         outputs: vec![output],
+        tze: tze::Bundle::default(),
         lock_time: LockTime::unlocked(),
         expiry_height,
         sapling_shielded_data: None,
@@ -2298,6 +2323,7 @@ async fn v5_coinbase_transaction_is_accepted() {
         network_upgrade,
         inputs: vec![input],
         outputs: vec![output],
+        tze: tze::Bundle::default(),
         lock_time: LockTime::Height(block::Height(0)),
         expiry_height: transaction_block_height,
         sapling_shielded_data: None,
@@ -2358,6 +2384,7 @@ async fn v5_transaction_with_transparent_transfer_is_rejected_by_the_script() {
     let transaction = Transaction::V5 {
         inputs: vec![input],
         outputs: vec![output],
+        tze: tze::Bundle::default(),
         lock_time: LockTime::Height(block::Height(0)),
         expiry_height: (transaction_block_height + 1).expect("expiry height is too large"),
         sapling_shielded_data: None,
@@ -2874,6 +2901,7 @@ async fn v5_consensus_branch_ids() {
     let mut tx = Transaction::V5 {
         inputs: vec![input],
         outputs: vec![output],
+        tze: tze::Bundle::default(),
         lock_time: LockTime::unlocked(),
         expiry_height: Height::MAX_EXPIRY_HEIGHT,
         sapling_shielded_data: None,
@@ -3529,6 +3557,7 @@ async fn mempool_zip317_error() {
     let tx = Transaction::V5 {
         inputs: vec![input],
         outputs: vec![output],
+        tze: tze::Bundle::default(),
         lock_time: LockTime::unlocked(),
         network_upgrade: NetworkUpgrade::Nu5,
         expiry_height: height,
@@ -3601,6 +3630,7 @@ async fn mempool_zip317_ok() {
     let tx = Transaction::V5 {
         inputs: vec![input],
         outputs: vec![output],
+        tze: tze::Bundle::default(),
         lock_time: LockTime::unlocked(),
         network_upgrade: NetworkUpgrade::Nu5,
         expiry_height: height,

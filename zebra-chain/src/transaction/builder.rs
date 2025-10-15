@@ -5,7 +5,7 @@ use crate::{
     block::Height,
     parameters::{Network, NetworkUpgrade},
     transaction::{LockTime, Transaction},
-    transparent,
+    transparent, tze,
 };
 
 impl Transaction {
@@ -87,6 +87,7 @@ impl Transaction {
 
             inputs,
             outputs,
+            tze: tze::Bundle::default(),
 
             // Zebra does not support shielded coinbase yet.
             //

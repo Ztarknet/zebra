@@ -18,6 +18,7 @@ use crate::{
         zcash_serialize_external_count, AtLeastOne, ReadZcashExt, SerializationError,
         TrustedPreallocate, ZcashDeserialize, ZcashDeserializeInto, ZcashSerialize,
     },
+    tze,
 };
 
 use super::*;
@@ -633,6 +634,7 @@ impl ZcashSerialize for Transaction {
                 expiry_height,
                 inputs,
                 outputs,
+                tze,
                 sapling_shielded_data,
                 orchard_shielded_data,
             } => {
@@ -661,6 +663,9 @@ impl ZcashSerialize for Transaction {
                 // Denoted as `tx_out_count` and `tx_out` in the spec.
                 outputs.zcash_serialize(&mut writer)?;
 
+                // Denoted as `tze_in_count`, `tze_in`, `tze_out_count`, and `tze_out` in ZIP-222.
+                tze.zcash_serialize(&mut writer)?;
+
                 // A bundle of fields denoted in the spec as `nSpendsSapling`, `vSpendsSapling`,
                 // `nOutputsSapling`,`vOutputsSapling`, `valueBalanceSapling`, `anchorSapling`,
                 // `vSpendProofsSapling`, `vSpendAuthSigsSapling`, `vOutputProofsSapling` and
@@ -680,6 +685,7 @@ impl ZcashSerialize for Transaction {
                 expiry_height,
                 inputs,
                 outputs,
+                tze,
                 sapling_shielded_data,
                 orchard_shielded_data,
             } => {
@@ -707,6 +713,9 @@ impl ZcashSerialize for Transaction {
 
                 // Denoted as `tx_out_count` and `tx_out` in the spec.
                 outputs.zcash_serialize(&mut writer)?;
+
+                // Denoted as `tze_in_count`, `tze_in`, `tze_out_count`, and `tze_out` in ZIP-222.
+                tze.zcash_serialize(&mut writer)?;
 
                 // A bundle of fields denoted in the spec as `nSpendsSapling`, `vSpendsSapling`,
                 // `nOutputsSapling`,`vOutputsSapling`, `valueBalanceSapling`, `anchorSapling`,
@@ -951,6 +960,9 @@ impl ZcashDeserialize for Transaction {
                 // Denoted as `tx_out_count` and `tx_out` in the spec.
                 let outputs = Vec::zcash_deserialize(&mut limited_reader)?;
 
+                // Denoted as `tze_in_count`, `tze_in`, `tze_out_count`, and `tze_out` in ZIP-222.
+                let tze = tze::Bundle::zcash_deserialize(&mut limited_reader)?;
+
                 // A bundle of fields denoted in the spec as `nSpendsSapling`, `vSpendsSapling`,
                 // `nOutputsSapling`,`vOutputsSapling`, `valueBalanceSapling`, `anchorSapling`,
                 // `vSpendProofsSapling`, `vSpendAuthSigsSapling`, `vOutputProofsSapling` and
@@ -968,6 +980,7 @@ impl ZcashDeserialize for Transaction {
                     expiry_height,
                     inputs,
                     outputs,
+                    tze,
                     sapling_shielded_data,
                     orchard_shielded_data,
                 })
@@ -1016,8 +1029,8 @@ pub const MIN_TRANSPARENT_TX_V4_SIZE: u64 = MIN_TRANSPARENT_TX_SIZE + 4;
 
 /// The minimum transaction size for v5 transactions.
 ///
-/// v5 transactions also have an expiry height and a consensus branch ID.
-pub const MIN_TRANSPARENT_TX_V5_SIZE: u64 = MIN_TRANSPARENT_TX_SIZE + 4 + 4;
+/// v5 transactions also have an expiry height, a consensus branch ID, and empty TZE vectors.
+pub const MIN_TRANSPARENT_TX_V5_SIZE: u64 = MIN_TRANSPARENT_TX_SIZE + 4 + 4 + 2;
 
 /// No valid Zcash message contains more transactions than can fit in a single block
 ///

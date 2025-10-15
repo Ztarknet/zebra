@@ -15,7 +15,7 @@ use crate::{
     primitives::{Bctv14Proof, Groth16Proof, Halo2Proof, ZkSnarkProof},
     sapling::{self, AnchorVariant, PerSpendAnchor, SharedAnchor},
     serialization::{self, ZcashDeserializeInto},
-    sprout, transparent,
+    sprout, transparent, tze,
     value_balance::{ValueBalance, ValueBalanceError},
     LedgerState,
 };
@@ -140,6 +140,7 @@ impl Transaction {
             any::<block::Height>(),
             transparent::Input::vec_strategy(&ledger_state, MAX_ARBITRARY_ITEMS),
             vec(any::<transparent::Output>(), 0..MAX_ARBITRARY_ITEMS),
+            Just(tze::Bundle::default()),
             option::of(any::<sapling::ShieldedData<sapling::SharedAnchor>>()),
             option::of(any::<orchard::ShieldedData>()),
         )
@@ -163,6 +164,11 @@ impl Transaction {
                         expiry_height,
                         inputs,
                         outputs,
+                        tze: if ledger_state.height.is_min() {
+                            tze::Bundle::default()
+                        } else {
+                            tze_bundle
+                        },
                         sapling_shielded_data: if ledger_state.height.is_min() {
                             // The genesis block should not contain any shielded data.
                             None

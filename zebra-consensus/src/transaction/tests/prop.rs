@@ -15,7 +15,7 @@ use zebra_chain::{
     parameters::{Network, NetworkUpgrade},
     serialization::arbitrary::{datetime_full, datetime_u32},
     transaction::{LockTime, Transaction},
-    transparent,
+    transparent, tze,
 };
 
 use crate::{error::TransactionError, transaction};

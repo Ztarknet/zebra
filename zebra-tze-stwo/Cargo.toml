@@ -1,0 +1,11 @@
+[package]
+name = "zebra-tze-stwo"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Prototype STWO-Cairo Transparent Zcash Extension verifier for Zebra"
+
+[dependencies]
+zebra-chain = { path = "../zebra-chain" }
+thiserror = "1.0"
+tracing = "0.1"

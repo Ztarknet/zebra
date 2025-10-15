@@ -56,6 +56,7 @@ use crate::{
         self, outputs_from_utxos,
         CoinbaseSpendRestriction::{self, *},
     },
+    tze,
     value_balance::{ValueBalance, ValueBalanceError},
     Error,
 };
@@ -144,6 +145,8 @@ pub enum Transaction {
         inputs: Vec<transparent::Input>,
         /// The transparent outputs from the transaction.
         outputs: Vec<transparent::Output>,
+        /// The transparent extension (TZE) data carried by this transaction.
+        tze: tze::Bundle,
         /// The sapling shielded data for this transaction, if any.
         sapling_shielded_data: Option<sapling::ShieldedData<sapling::SharedAnchor>>,
         /// The orchard data for this transaction, if any.
@@ -165,6 +168,8 @@ pub enum Transaction {
         inputs: Vec<transparent::Input>,
         /// The transparent outputs from the transaction.
         outputs: Vec<transparent::Output>,
+        /// The transparent extension (TZE) data carried by this transaction.
+        tze: tze::Bundle,
         /// The sapling shielded data for this transaction, if any.
         sapling_shielded_data: Option<sapling::ShieldedData<sapling::SharedAnchor>>,
         /// The orchard data for this transaction, if any.
@@ -305,7 +310,7 @@ impl Transaction {
 
     /// Does this transaction have transparent or shielded inputs?
     pub fn has_transparent_or_shielded_inputs(&self) -> bool {
-        self.has_transparent_inputs() || self.has_shielded_inputs()
+        self.has_transparent_inputs() || self.has_shielded_inputs() || self.has_tze_inputs()
     }
 
     /// Does this transaction have shielded inputs?
@@ -336,7 +341,7 @@ impl Transaction {
 
     /// Does this transaction have transparent or shielded outputs?
     pub fn has_transparent_or_shielded_outputs(&self) -> bool {
-        self.has_transparent_outputs() || self.has_shielded_outputs()
+        self.has_transparent_outputs() || self.has_shielded_outputs() || self.has_tze_outputs()
     }
 
     /// Does this transaction has at least one flag when we have at least one orchard action?
@@ -560,6 +565,46 @@ impl Transaction {
             #[cfg(feature = "tx_v6")]
             Transaction::V6 { ref outputs, .. } => outputs,
         }
+    }
+
+    /// Access the TZE bundle if present.
+    pub fn tze(&self) -> Option<&tze::Bundle> {
+        match self {
+            Transaction::V5 { tze, .. } => Some(tze),
+            #[cfg(feature = "tx_v6")]
+            Transaction::V6 { tze, .. } => Some(tze),
+            _ => None,
+        }
+    }
+
+    /// Access the TZE inputs of this transaction, regardless of version.
+    pub fn tze_inputs(&self) -> &[tze::TzeIn] {
+        match self {
+            Transaction::V5 { tze, .. } => tze.inputs.as_slice(),
+            #[cfg(feature = "tx_v6")]
+            Transaction::V6 { tze, .. } => tze.inputs.as_slice(),
+            _ => &[],
+        }
+    }
+
+    /// Access the TZE outputs of this transaction, regardless of version.
+    pub fn tze_outputs(&self) -> &[tze::TzeOut] {
+        match self {
+            Transaction::V5 { tze, .. } => tze.outputs.as_slice(),
+            #[cfg(feature = "tx_v6")]
+            Transaction::V6 { tze, .. } => tze.outputs.as_slice(),
+            _ => &[],
+        }
+    }
+
+    /// Returns `true` if this transaction has any TZE inputs.
+    pub fn has_tze_inputs(&self) -> bool {
+        !self.tze_inputs().is_empty()
+    }
+
+    /// Returns `true` if this transaction has any TZE outputs.
+    pub fn has_tze_outputs(&self) -> bool {
+        !self.tze_outputs().is_empty()
     }
 
     /// Returns `true` if this transaction has valid inputs for a coinbase
@@ -1138,11 +1183,21 @@ impl Transaction {
             .constrain()
             .expect("conversion from NonNegative to NegativeAllowed is always valid");
 
-        let output_value = self
+        let transparent_total = self
             .outputs()
             .iter()
-            .map(|o| o.value())
-            .sum::<Result<Amount<NonNegative>, AmountError>>()
+            .try_fold(Amount::zero(), |acc, output| {
+                (acc + output.value()).map_err(ValueBalanceError::Transparent)
+            })?;
+
+        let tze_total = self
+            .tze_outputs()
+            .iter()
+            .try_fold(Amount::zero(), |acc, output| {
+                (acc + output.value).map_err(ValueBalanceError::Transparent)
+            })?;
+
+        let output_value = (transparent_total + tze_total)
             .map_err(ValueBalanceError::Transparent)?
             .constrain()
             .expect("conversion from NonNegative to NegativeAllowed is always valid");
