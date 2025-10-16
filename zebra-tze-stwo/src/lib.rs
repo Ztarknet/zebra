@@ -1,6 +1,6 @@
-//! Prototype STWO-Cairo Transparent Zcash Extension verifier.
+//! Prototype STWO-Cairo verifier wiring for Zebra.
 //!
-//! This crate exposes minimal constants and a stub verifier that always succeeds.
+//! This crate exposes a wrapper that feeds proofs into the STWO Cairo verifier.
 
 use cairo_air::verifier::verify_cairo;
 use cairo_air::{CairoProof, PreProcessedTraceVariant};
@@ -12,31 +12,13 @@ use stwo_cairo_prover::stwo_prover::core::vcs::blake2_merkle::{
 };
 use thiserror::Error;
 use tracing::instrument;
-use zebra_chain::tze;
-
-/// Extension identifier allocated to the STWO Cairo verifier TZE.
-///
-/// The numeric value is provisional and chosen for ease of debugging (`"STWO"` in ASCII).
-pub const STWO_CAIRO_EXTENSION_ID: u64 = 0x5354_574F;
-
-/// Supported TZE modes for the prototype.
-pub const STWO_CAIRO_SUPPORTED_MODES: &[u64] = &[0];
 
 /// Errors that may be returned by the STWO verifier stub.
 #[derive(Debug, Error)]
 pub enum VerifyError {
-    /// Returned when the caller tries to verify a mode that is not part of the prototype surface.
-    #[error("unsupported STWO mode {mode}")]
-    UnsupportedMode {
-        /// The unsupported mode value.
-        mode: u64,
-    },
-    /// Returned when the precondition payload is malformed.
-    #[error("invalid precondition payload: {0}")]
-    InvalidPrecondition(&'static str),
     /// Returned when witness data is not valid UTF-8.
-    #[error("invalid witness encoding: {0}")]
-    InvalidWitnessEncoding(&'static str),
+    #[error("invalid proof encoding: {0}")]
+    InvalidProofEncoding(&'static str),
     /// Returned when the proof JSON payload cannot be parsed.
     #[error("invalid proof payload: {0}")]
     InvalidProof(#[from] SerdeJsonError),
@@ -45,39 +27,11 @@ pub enum VerifyError {
     VerificationFailed(String),
 }
 
-/// Prototype verifier entry point.
-///
-/// The current implementation does not execute a STARK verifier. It merely checks that the
-/// requested `(extension_id, mode)` pair matches the stub configuration and returns success.
-#[instrument(level = "debug", skip(precondition, witness))]
-pub fn verify_stwo_cairo(
-    extension_id: u64,
-    mode: u64,
-    precondition: &tze::Data,
-    witness: &tze::Data,
-) -> Result<(), VerifyError> {
-    if extension_id != STWO_CAIRO_EXTENSION_ID
-        || precondition.extension_id.0 != STWO_CAIRO_EXTENSION_ID
-        || witness.extension_id.0 != STWO_CAIRO_EXTENSION_ID
-    {
-        tracing::debug!(
-            "prototype verifier received mismatched extension ids: request={extension_id:#x}, precondition={}, witness={}",
-            precondition.extension_id.0,
-            witness.extension_id.0
-        );
-    }
-
-    if !STWO_CAIRO_SUPPORTED_MODES.contains(&mode)
-        || !STWO_CAIRO_SUPPORTED_MODES.contains(&precondition.mode.0)
-        || !STWO_CAIRO_SUPPORTED_MODES.contains(&witness.mode.0)
-    {
-        return Err(VerifyError::UnsupportedMode { mode });
-    }
-
-    let (with_pedersen, proof_bytes) = extract_proof_bytes(precondition, witness)?;
-
+/// Prototype verifier entry point that validates a JSON-encoded proof.
+#[instrument(level = "debug")]
+pub fn verify_stwo_cairo(with_pedersen: bool, proof_bytes: &[u8]) -> Result<(), VerifyError> {
     let proof_str = std::str::from_utf8(proof_bytes)
-        .map_err(|_| VerifyError::InvalidWitnessEncoding("proof must be valid UTF-8"))?;
+        .map_err(|_| VerifyError::InvalidProofEncoding("proof must be valid UTF-8"))?;
     let cairo_proof: CairoProof<Blake2sMerkleHasher> = serde_json::from_str(proof_str)?;
 
     let preprocessed_trace = if with_pedersen {
@@ -90,23 +44,6 @@ pub fn verify_stwo_cairo(
         .map_err(|err| VerifyError::VerificationFailed(format!("{err:?}")))
 }
 
-fn extract_proof_bytes<'a>(
-    precondition: &'a tze::Data,
-    witness: &'a tze::Data,
-) -> Result<(bool, &'a [u8]), VerifyError> {
-    if let Some(flag) = precondition.payload.first() {
-        let with_pedersen = *flag != 0;
-        Ok((with_pedersen, &witness.payload))
-    } else if let Some((flag, rest)) = witness.payload.split_first() {
-        let with_pedersen = *flag != 0;
-        Ok((with_pedersen, rest))
-    } else {
-        Err(VerifyError::InvalidPrecondition(
-            "witness payload must contain at least one byte",
-        ))
-    }
-}
-
 fn secure_pcs_config() -> PcsConfig {
     PcsConfig {
         pow_bits: 26,
@@ -115,5 +52,37 @@ fn secure_pcs_config() -> PcsConfig {
             log_blowup_factor: 1,
             n_queries: 70,
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use cairo_vm::Felt252;
+    use num_bigint::BigInt;
+
+    use super::*;
+    use cairo_lang_runner::Arg;
+    use cairo_prove::args::RunTarget;
+    use cairo_prove::execute::execute;
+    use cairo_prove::prove::{prove, prover_input_from_runner};
+    use stwo_cairo_prover::stwo_prover::core::pcs::PcsConfig;
+
+    fn execute_and_prove(target_path: &str, args: Vec<Arg>, pcs_config: PcsConfig) -> Vec<u8> {
+        let executable = serde_json::from_reader(std::fs::File::open(target_path).unwrap())
+            .expect("Failed to read executable");
+        let runner = execute(executable, RunTarget::default(), args);
+        let prover_input = prover_input_from_runner(&runner);
+        let proof = prove(prover_input, pcs_config);
+        serde_json::to_vec(&proof).expect("Failed to serialize proof to JSON")
+    }
+
+    #[test]
+    fn test_e2e() {
+        let target_path = "./example/target/release/example.executable.json";
+        let args = vec![Arg::Value(Felt252::from(BigInt::from(100)))];
+        let proof_bytes = execute_and_prove(target_path, args, PcsConfig::default());
+
+        let result = verify_stwo_cairo(false, &proof_bytes);
+        assert!(result.is_ok());
     }
 }

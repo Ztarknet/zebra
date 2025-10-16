@@ -174,18 +174,6 @@ pub enum TransactionError {
     #[error("must have at least one active orchard flag")]
     NotEnoughFlags,
 
-    #[error("transactions that mix multiple TZE modes within inputs/outputs are invalid")]
-    TzeMixedExtensions,
-
-    #[error("unsupported TZE extension {extension}")]
-    TzeUnsupportedExtension { extension: u32 },
-
-    #[error("unsupported TZE mode {mode} for extension {extension}")]
-    TzeUnsupportedMode { extension: u32, mode: u32 },
-
-    #[error("TZE verification failed: {0}")]
-    TzeVerificationFailed(String),
-
     #[error("could not find a mempool transaction input UTXO in the best chain")]
     TransparentInputNotFound,
 
@@ -305,10 +293,6 @@ impl TransactionError {
             | BothVPubsNonZero
             | DisabledAddToSproutPool
             | NotEnoughFlags
-            | TzeMixedExtensions
-            | TzeUnsupportedExtension { .. }
-            | TzeUnsupportedMode { .. }
-            | TzeVerificationFailed(..)
             | WrongConsensusBranchId
             | MissingConsensusBranchId => 100,
 

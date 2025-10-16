@@ -21,6 +21,9 @@ use zebra_chain::{
     transaction::{HashType, SigHasher},
     transparent,
 };
+use zebra_tze_stwo::verify_stwo_cairo;
+
+const OP_STARK_VERIFY: u8 = 0xDA;
 
 /// An Error type representing the error codes returned from zcash_script.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
@@ -154,6 +157,10 @@ impl CachedFfiTransaction {
             transparent::Input::Coinbase { .. } => Err(Error::TxCoinbase)?,
         };
 
+        if let Some(result) = try_execute_op_stark_verify(script_pub_key, signature_script) {
+            return result;
+        }
+
         let script =
             script::Raw::from_raw_parts(signature_script.to_vec(), script_pub_key.to_vec());
 
@@ -185,6 +192,120 @@ impl CachedFfiTransaction {
                     Err(Error::ScriptInvalid)
                 }
             })
+    }
+}
+
+fn try_execute_op_stark_verify(
+    lock_script: &[u8],
+    unlock_script: &[u8],
+) -> Option<Result<(), Error>> {
+    if lock_script != [OP_STARK_VERIFY] {
+        return None;
+    }
+
+    let pushes = match decode_pushes(unlock_script) {
+        Ok(pushes) => pushes,
+        Err(err) => return Some(Err(err)),
+    };
+
+    if pushes.len() != 2 {
+        return Some(Err(Error::ScriptInvalid));
+    }
+
+    let pedersen_flag = pushes[0];
+    let proof_bytes = pushes[1];
+
+    if pedersen_flag.len() != 1 {
+        return Some(Err(Error::ScriptInvalid));
+    }
+
+    let with_pedersen = pedersen_flag[0] != 0;
+
+    match verify_stwo_cairo(with_pedersen, proof_bytes) {
+        Ok(()) => Some(Ok(())),
+        Err(_) => Some(Err(Error::ScriptInvalid)),
+    }
+}
+
+fn decode_pushes(script: &[u8]) -> Result<Vec<&[u8]>, Error> {
+    let mut remaining = script;
+    let mut pushes = Vec::new();
+
+    while !remaining.is_empty() {
+        if let Some((data, rest)) = read_push(remaining) {
+            pushes.push(data);
+            remaining = rest;
+        } else {
+            return Err(Error::ScriptInvalid);
+        }
+    }
+
+    Ok(pushes)
+}
+
+fn read_push(data: &[u8]) -> Option<(&[u8], &[u8])> {
+    if data.is_empty() {
+        return None;
+    }
+
+    let opcode = data[0];
+    match opcode {
+        0x00 => Some((&[], &data[1..])),
+        0x01..=0x4b => {
+            let length = opcode as usize;
+            if data.len() < 1 + length {
+                return None;
+            }
+            Some((&data[1..1 + length], &data[1 + length..]))
+        }
+        0x4c => {
+            if data.len() < 2 {
+                return None;
+            }
+            let length = data[1] as usize;
+            if data.len() < 2 + length {
+                return None;
+            }
+            Some((&data[2..2 + length], &data[2 + length..]))
+        }
+        0x4d => {
+            if data.len() < 3 {
+                return None;
+            }
+            let length = u16::from_le_bytes([data[1], data[2]]) as usize;
+            if data.len() < 3 + length {
+                return None;
+            }
+            Some((&data[3..3 + length], &data[3 + length..]))
+        }
+        0x4e => {
+            if data.len() < 5 {
+                return None;
+            }
+            let length = u32::from_le_bytes([data[1], data[2], data[3], data[4]]) as usize;
+            if data.len() < 5 + length {
+                return None;
+            }
+            Some((&data[5..5 + length], &data[5 + length..]))
+        }
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod opcode_tests {
+    use super::{try_execute_op_stark_verify, Error, OP_STARK_VERIFY};
+
+    #[test]
+    fn non_matching_lock_script_is_ignored() {
+        assert!(try_execute_op_stark_verify(&[0x51], &[0x01]).is_none());
+    }
+
+    #[test]
+    fn missing_unlock_pushes_fail() {
+        let result =
+            try_execute_op_stark_verify(&[OP_STARK_VERIFY], &[]).expect("should attempt opcode");
+        assert_eq!(result, Err(Error::ScriptInvalid));
     }
 }
 

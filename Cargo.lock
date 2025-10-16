@@ -8048,6 +8048,7 @@ dependencies = [
  "zcash_script",
  "zebra-chain",
  "zebra-test",
+ "zebra-tze-stwo",
 ]
 
 [[package]]
@@ -8135,7 +8136,6 @@ dependencies = [
  "stwo_cairo_prover",
  "thiserror 1.0.69",
  "tracing",
- "zebra-chain",
 ]
 
 [[package]]

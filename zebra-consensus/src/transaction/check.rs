@@ -23,9 +23,7 @@ use zebra_chain::{
     transparent,
 };
 
-use crate::{error::TransactionError, transaction::STWO_CAIRO_EXTENSION_ID};
-
-use super::STWO_CAIRO_SUPPORTED_MODES;
+use crate::error::TransactionError;
 
 /// Checks if the transaction's lock time allows this transaction to be included in a block.
 ///
@@ -148,71 +146,6 @@ pub fn has_enough_orchard_flags(tx: &Transaction) -> Result<(), TransactionError
     if !tx.has_enough_orchard_flags() {
         return Err(TransactionError::NotEnoughFlags);
     }
-    Ok(())
-}
-
-/// Basic structural checks for TZE bundles.
-///
-/// Ensures that only supported modes are used and enforces the cross-type restriction
-/// when both inputs and outputs are present in the same transaction.
-pub fn tze_bundle_sanity_checks(tx: &Transaction) -> Result<(), TransactionError> {
-    let tze_inputs = tx.tze_inputs();
-    let tze_outputs = tx.tze_outputs();
-
-    if tze_inputs.is_empty() && tze_outputs.is_empty() {
-        return Ok(());
-    }
-
-    for output in tze_outputs {
-        ensure_supported_extension_mode(
-            output.precondition.extension_id.0,
-            output.precondition.mode.0,
-        )?;
-    }
-
-    for input in tze_inputs {
-        ensure_supported_extension_mode(input.witness.extension_id.0, input.witness.mode.0)?;
-    }
-
-    if !tze_inputs.is_empty() && !tze_outputs.is_empty() {
-        let expected_mode = if let Some(first_out) = tze_outputs.first() {
-            first_out.precondition.mode.0
-        } else if let Some(first_in) = tze_inputs.first() {
-            first_in.witness.mode.0
-        } else {
-            return Ok(());
-        };
-
-        let mismatch_on_outputs = tze_outputs
-            .iter()
-            .any(|out| out.precondition.mode.0 != expected_mode);
-
-        let mismatch_on_inputs = tze_inputs
-            .iter()
-            .any(|input| input.witness.mode.0 != expected_mode);
-
-        if mismatch_on_outputs || mismatch_on_inputs {
-            return Err(TransactionError::TzeMixedExtensions);
-        }
-    }
-
-    Ok(())
-}
-
-fn ensure_supported_extension_mode(extension_id: u64, mode: u64) -> Result<(), TransactionError> {
-    if extension_id != STWO_CAIRO_EXTENSION_ID {
-        return Err(TransactionError::TzeUnsupportedExtension {
-            extension: u32::try_from(extension_id).unwrap_or(u32::MAX),
-        });
-    }
-
-    if !STWO_CAIRO_SUPPORTED_MODES.contains(&mode) {
-        return Err(TransactionError::TzeUnsupportedMode {
-            extension: u32::try_from(extension_id).unwrap_or(u32::MAX),
-            mode: u32::try_from(mode).unwrap_or(u32::MAX),
-        });
-    }
-
     Ok(())
 }
 
