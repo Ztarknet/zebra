@@ -183,6 +183,9 @@ pub enum TransactionError {
     #[error("unsupported TZE mode {mode} for extension {extension}")]
     TzeUnsupportedMode { extension: u32, mode: u32 },
 
+    #[error("TZE verification failed: {0}")]
+    TzeVerificationFailed(String),
+
     #[error("could not find a mempool transaction input UTXO in the best chain")]
     TransparentInputNotFound,
 
@@ -305,6 +308,7 @@ impl TransactionError {
             | TzeMixedExtensions
             | TzeUnsupportedExtension { .. }
             | TzeUnsupportedMode { .. }
+            | TzeVerificationFailed(..)
             | WrongConsensusBranchId
             | MissingConsensusBranchId => 100,
 

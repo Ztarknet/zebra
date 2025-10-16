@@ -157,6 +157,9 @@ zcash_script = "0.4"
 config = { version = "0.15.14", features = ["toml"] }
 which = "8.0.0"
 
+[patch.crates-io]
+size-of = { path = "patches/size-of-0.1.5" }
+
 [workspace.metadata.release]
 
 # We always do releases from the main branch

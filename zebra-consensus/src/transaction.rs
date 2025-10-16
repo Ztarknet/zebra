@@ -35,7 +35,7 @@ use zebra_chain::{
     transaction::{
         self, HashType, SigHash, Transaction, UnminedTx, UnminedTxId, VerifiedUnminedTx,
     },
-    transparent,
+    transparent, tze,
 };
 
 use zebra_node_services::mempool;
@@ -1255,10 +1255,16 @@ where
                 });
             }
 
+            let placeholder_precondition = tze::Data {
+                extension_id: tze::ExtensionId(input.witness.extension_id.0),
+                mode: tze::Mode(input.witness.mode.0),
+                payload: Vec::new(),
+            };
+
             match zebra_tze_stwo::verify_stwo_cairo(
                 input.witness.extension_id.0,
                 input.witness.mode.0,
-                &input.witness,
+                &placeholder_precondition,
                 &input.witness,
             ) {
                 Ok(()) => {}
@@ -1267,6 +1273,9 @@ where
                         extension: u32::try_from(input.witness.extension_id.0).unwrap_or(u32::MAX),
                         mode: u32::try_from(mode).unwrap_or(u32::MAX),
                     })
+                }
+                Err(other) => {
+                    return Err(TransactionError::TzeVerificationFailed(other.to_string()))
                 }
             }
         }

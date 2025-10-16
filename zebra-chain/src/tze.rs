@@ -239,24 +239,6 @@ impl TrustedPreallocate for Bundle {
     }
 }
 
-/// Helper trait providing conversions from `Zatoshis` into Zebra amounts.
-pub trait TzeValueExt {
-    /// Convert the value to a Zebra `Amount`.
-    fn amount(&self) -> Amount<NonNegative>;
-}
-
-impl TzeValueExt for TzeOut {
-    fn amount(&self) -> Amount<NonNegative> {
-        self.value
-    }
-}
-
-/// Convert a `Zatoshis` value into a Zebra `Amount`.
-pub fn amount_from_zatoshis(value: zcash_protocol::value::Zatoshis) -> Amount<NonNegative> {
-    let bytes = value.to_i64_le_bytes();
-    Amount::try_from(i64::from_le_bytes(bytes)).expect("Zatoshis values fit into Amount")
-}
-
 /// Convenience helper to produce an empty bundle.
 pub fn empty_bundle() -> Bundle {
     Bundle::default()
