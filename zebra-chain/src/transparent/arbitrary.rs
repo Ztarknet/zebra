@@ -43,7 +43,7 @@ impl Arbitrary for Input {
             (any::<OutPoint>(), any::<Script>(), any::<u32>())
                 .prop_map(|(outpoint, unlock_script, sequence)| Input::PrevOut {
                     outpoint,
-                    unlock_script,
+                    unlock_script: unlock_script.into(),
                     sequence,
                 })
                 .boxed()

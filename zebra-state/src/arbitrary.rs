@@ -67,7 +67,7 @@ impl ContextuallyVerifiedBlock {
 
         let zero_output = transparent::Output {
             value: Amount::zero(),
-            lock_script: transparent::Script::new(&[]),
+            lock_script: transparent::Script::new(&[]).into(),
         };
 
         let zero_utxo = transparent::OrderedUtxo::new(zero_output, block::Height(1), 1);

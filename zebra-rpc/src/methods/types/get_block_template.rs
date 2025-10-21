@@ -821,6 +821,10 @@ pub fn generate_coinbase_and_roots(
         NetworkUpgrade::Nu5 | NetworkUpgrade::Nu6 | NetworkUpgrade::Nu6_1 | NetworkUpgrade::Nu7 => {
             Transaction::new_v5_coinbase(network, height, outputs, miner_data)
         }
+        #[cfg(zcash_unstable = "zfuture")]
+        NetworkUpgrade::ZFuture => {
+            Transaction::new_v5_coinbase(network, height, outputs, miner_data)
+        }
         _ => Err("Zebra does not support generating pre-Canopy coinbase transactions")?,
     }
     .into();

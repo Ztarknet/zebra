@@ -12,7 +12,7 @@ use crate::{
     parameters::NetworkUpgrade,
     serialization::ZcashSerialize,
     transaction::{AuthDigest, HashType, SigHash, Transaction},
-    transparent::{self, Script},
+    transparent::{self, ExtendedScript, Script, TzeData},
     Error,
 };
 
@@ -35,11 +35,14 @@ impl zcash_transparent::sighash::TransparentAuthorizingContext for TransparentAu
     fn input_amounts(&self) -> Vec<Zatoshis> {
         self.all_prev_outputs
             .iter()
-            .map(|prevout| {
-                prevout
-                    .value
-                    .try_into()
-                    .expect("will not fail since it was previously validated")
+            .filter_map(|prevout| match prevout.lock_script {
+                ExtendedScript::Bytecode(_) => Some(
+                    prevout
+                        .value
+                        .try_into()
+                        .expect("will not fail since it was previously validated"),
+                ),
+                ExtendedScript::Extension(_) => None,
             })
             .collect()
     }
@@ -47,10 +50,11 @@ impl zcash_transparent::sighash::TransparentAuthorizingContext for TransparentAu
     fn input_scriptpubkeys(&self) -> Vec<zcash_transparent::address::Script> {
         self.all_prev_outputs
             .iter()
-            .map(|prevout| {
-                zcash_transparent::address::Script(script::Code(
-                    prevout.lock_script.as_raw_bytes().into(),
-                ))
+            .filter_map(|prevout| match &prevout.lock_script {
+                ExtendedScript::Bytecode(script) => Some(zcash_transparent::address::Script(
+                    script::Code(script.as_raw_bytes().to_vec()),
+                )),
+                ExtendedScript::Extension(_) => None,
             })
             .collect()
     }
@@ -207,6 +211,32 @@ impl From<Script> for zcash_transparent::address::Script {
     }
 }
 
+/// Convert a Zebra TzeData into a librustzcash Precondition.
+impl From<TzeData> for zcash_primitives::extensions::transparent::Precondition {
+    fn from(tze_data: TzeData) -> Self {
+        zcash_primitives::extensions::transparent::Precondition {
+            extension_id: tze_data.extension_id,
+            mode: tze_data.mode,
+            payload: tze_data.payload.clone(),
+        }
+    }
+}
+
+/// Convert a Zebra TzeData into a librustzcash Witness<AuthData>.
+impl From<TzeData>
+    for zcash_primitives::extensions::transparent::Witness<
+        zcash_primitives::extensions::transparent::AuthData,
+    >
+{
+    fn from(tze_data: TzeData) -> Self {
+        zcash_primitives::extensions::transparent::Witness {
+            extension_id: tze_data.extension_id,
+            mode: tze_data.mode,
+            payload: zcash_primitives::extensions::transparent::AuthData(tze_data.payload.clone()),
+        }
+    }
+}
+
 /// Precomputed data used for sighash or txid computation.
 #[derive(Debug)]
 pub(crate) struct PrecomputedTxData {
@@ -311,23 +341,40 @@ pub(crate) fn sighash(
 ) -> SigHash {
     let lock_script: zcash_transparent::address::Script;
     let unlock_script: zcash_transparent::address::Script;
+    let tze_precondition: zcash_primitives::extensions::transparent::Precondition;
+
     let signable_input = match input_index_script_code {
         Some((input_index, script_code)) => {
             let output = &precomputed_tx_data.all_previous_outputs[input_index];
-            lock_script = output.lock_script.clone().into();
-            unlock_script = zcash_transparent::address::Script(script::Code(script_code));
-            zp_tx::sighash::SignableInput::Transparent(
-                zcash_transparent::sighash::SignableInput::from_parts(
-                    hash_type.try_into().expect("hash type should be ALL"),
-                    input_index,
-                    &unlock_script,
-                    &lock_script,
-                    output
-                        .value
-                        .try_into()
-                        .expect("amount was previously validated"),
-                ),
-            )
+            match &output.lock_script {
+                ExtendedScript::Bytecode(script) => {
+                    lock_script = script.into();
+                    unlock_script = zcash_transparent::address::Script(script::Code(script_code));
+                    zp_tx::sighash::SignableInput::Transparent(
+                        zcash_transparent::sighash::SignableInput::from_parts(
+                            hash_type.try_into().expect("hash type should be ALL"),
+                            input_index,
+                            &unlock_script,
+                            &lock_script,
+                            output
+                                .value
+                                .try_into()
+                                .expect("amount was previously validated"),
+                        ),
+                    )
+                }
+                ExtendedScript::Extension(tze_data) => {
+                    tze_precondition = tze_data.clone().into();
+                    zp_tx::sighash::SignableInput::Tze {
+                        index: input_index,
+                        precondition: &tze_precondition,
+                        value: output
+                            .value
+                            .try_into()
+                            .expect("amount was previously validated"),
+                    }
+                }
+            }
         }
         None => zp_tx::sighash::SignableInput::Shielded,
     };

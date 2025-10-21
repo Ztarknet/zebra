@@ -488,9 +488,17 @@ where
                 Self::check_maturity_height(&network, &req, &spent_utxos)?;
             }
 
+            // Verify TZE extension IDs consistency.
+            check::tze_extension_ids_consistent(&tx, req.known_utxos(), &spent_utxos)?;
+
             let nu = req.upgrade(&network);
             let cached_ffi_transaction =
-                Arc::new(CachedFfiTransaction::new(tx.clone(), Arc::new(spent_outputs), nu).map_err(|_| TransactionError::UnsupportedByNetworkUpgrade(tx.version(), nu))?);
+                Arc::new(CachedFfiTransaction::new(
+                    tx.clone(),
+                    Arc::new(spent_outputs),
+                    nu,
+                    req.height()
+                ).map_err(|_| TransactionError::UnsupportedByNetworkUpgrade(tx.version(), nu))?);
 
             tracing::trace!(?tx_id, "got state UTXOs");
 

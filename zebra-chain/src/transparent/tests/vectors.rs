@@ -105,7 +105,7 @@ fn get_transparent_output_address_with_blocks_for_network(network: Network) {
         for (idx, tx) in block.transactions.iter().enumerate() {
             for output in tx.outputs() {
                 let addr = output.address(&network);
-                if addr.is_none() && idx == 0 && output.lock_script.as_raw_bytes()[0] == 0x21 {
+                if addr.is_none() && idx == 0 && output.is_p2pk() {
                     // There are a bunch of coinbase transactions with pay-to-pubkey scripts
                     // which we don't support; skip them
                     continue;
