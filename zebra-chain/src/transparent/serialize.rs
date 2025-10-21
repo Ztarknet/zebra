@@ -1,8 +1,10 @@
-//! Serializes and deserializes transparent data.
+//! Serializes and deserializes xansparent data.
 
 use std::io;
 
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+use zcash_primitives::extensions::transparent as tze;
+use zcash_primitives::transaction::components::tze::{TzeIn, TzeOut};
 
 use crate::{
     block::{self, Height},
@@ -342,5 +344,29 @@ impl ZcashDeserialize for Output {
             value: reader.zcash_deserialize_into()?,
             lock_script: Script::zcash_deserialize(reader)?,
         })
+    }
+}
+
+impl ZcashSerialize for TzeIn<tze::AuthData> {
+    fn zcash_serialize<W: io::Write>(&self, writer: W) -> Result<(), io::Error> {
+        self.write(writer)
+    }
+}
+
+impl ZcashDeserialize for TzeIn<tze::AuthData> {
+    fn zcash_deserialize<R: io::Read>(mut reader: R) -> Result<Self, SerializationError> {
+        Self::read(&mut reader).map_err(Into::into)
+    }
+}
+
+impl ZcashSerialize for TzeOut {
+    fn zcash_serialize<W: io::Write>(&self, writer: W) -> Result<(), io::Error> {
+        self.write(writer)
+    }
+}
+
+impl ZcashDeserialize for TzeOut {
+    fn zcash_deserialize<R: io::Read>(mut reader: R) -> Result<Self, SerializationError> {
+        Self::read(&mut reader).map_err(Into::into)
     }
 }
