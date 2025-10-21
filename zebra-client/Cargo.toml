@@ -1,0 +1,27 @@
+[package]
+name = "zebra-client"
+edition = "2021"
+
+[features]
+tx_v6 = ["zebra-chain/tx_v6", "zebra-rpc/tx_v6"]
+
+[dependencies]
+zebra-rpc = { path = "../zebra-rpc", version = "3.0.0" }
+zebra-node-services = { path = "../zebra-node-services", version = "2.0.0" }
+zebra-chain = { path = "../zebra-chain", version = "3.0.0" }
+zcash_transparent = { workspace = true }
+zcash_extensions = { workspace = true }
+zcash_primitives = { workspace = true }
+zcash_protocol = { workspace = true }
+zcash_address = { workspace = true }
+zcash_proofs = { workspace = true }
+secp256k1 = { workspace = true }
+sha2 = { workspace = true }
+ripemd = { workspace = true }
+blake2b_simd = { workspace = true }
+bip0039 = "0.12"
+anyhow = "1.0"
+hex = "0.4"
+tokio = { workspace = true, features = ["full", "test-util"] }
+async-trait = "0.1"
+rand_core = "0.6"

@@ -2127,7 +2127,7 @@ where
             let txid = *utxo_data.1;
             let height = utxo_data.2.height();
             let output_index = utxo_data.2.output_index();
-            let script = utxo_data.3.lock_script.clone();
+            let script = utxo_data.3.lock_script.to_script();
             let satoshis = u64::from(utxo_data.3.value);
 
             let output_location = *utxo_data.2;

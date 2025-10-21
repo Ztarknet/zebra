@@ -10,6 +10,7 @@ members = [
         "zebra-node-services",
         "zebra-test",
         "zebra-utils",
+        "zebra-client",
         "tower-batch-control",
         "tower-fallback",
 ]
@@ -31,6 +32,7 @@ zcash_primitives = "0.26"
 zcash_proofs = "0.26"
 zcash_transparent = "0.6"
 zcash_protocol = "0.7"
+zcash_extensions = { git = "https://github.com/Ztarknet/librustzcash", rev = "c6ead76291de346822985dee58ad1cb8cdb51dcd" }
 zip32 = "0.2"
 abscissa_core = "0.7"
 atty = "0.2.14"
@@ -293,3 +295,6 @@ unexpected_cfgs = { level = "warn", check-cfg = [
     'cfg(tokio_unstable)', # Used by tokio-console
     'cfg(zcash_unstable, values("zfuture", "nu6.1", "nu7"))' # Used in Zebra and librustzcash
 ] }
+
+[patch.crates-io]
+zcash_protocol = { git = "https://github.com/ztarknet/librustzcash", rev = "c6ead76291de346822985dee58ad1cb8cdb51dcd" }

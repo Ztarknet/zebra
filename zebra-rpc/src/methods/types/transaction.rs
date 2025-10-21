@@ -662,7 +662,7 @@ impl TransactionObject {
                         vout: outpoint.index,
                         script_sig: ScriptSig {
                             asm: "".to_string(),
-                            hex: unlock_script.clone(),
+                            hex: unlock_script.to_script(),
                         },
                         sequence: *sequence,
                         value: None,
@@ -690,7 +690,7 @@ impl TransactionObject {
                         script_pub_key: ScriptPubKey {
                             // TODO: Fill this out.
                             asm: "".to_string(),
-                            hex: output.1.lock_script.clone(),
+                            hex: output.1.lock_script.to_script(),
                             req_sigs,
                             // TODO: Fill this out.
                             r#type: "".to_string(),

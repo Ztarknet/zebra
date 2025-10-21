@@ -223,6 +223,9 @@ pub enum TransactionError {
 
     #[error("wrong tx format: tx version is ≥ 5, but `nConsensusBranchId` is missing")]
     MissingConsensusBranchId,
+
+    #[error("TZE extension IDs are not consistent")]
+    TzeExtensionIdsNotConsistent,
 }
 
 impl From<ValidateContextError> for TransactionError {
