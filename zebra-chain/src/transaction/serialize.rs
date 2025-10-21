@@ -14,10 +14,11 @@ use crate::{
     parameters::{OVERWINTER_VERSION_GROUP_ID, SAPLING_VERSION_GROUP_ID, TX_V5_VERSION_GROUP_ID},
     primitives::{Halo2Proof, ZkSnarkProof},
     serialization::{
-        zcash_deserialize_external_count, zcash_serialize_empty_list,
+        zcash_deserialize_external_count, zcash_serialize_bytes, zcash_serialize_empty_list,
         zcash_serialize_external_count, AtLeastOne, ReadZcashExt, SerializationError,
         TrustedPreallocate, ZcashDeserialize, ZcashDeserializeInto, ZcashSerialize,
     },
+    transparent::OutPoint,
 };
 
 use super::*;
@@ -463,6 +464,81 @@ impl<T: reddsa::SigType> ZcashDeserialize for reddsa::Signature<T> {
     }
 }
 
+impl ZcashSerialize for tze::ExtensionData {
+    fn zcash_serialize<W: io::Write>(&self, mut writer: W) -> Result<(), io::Error> {
+        self.inputs.zcash_serialize(&mut writer)?;
+        self.outputs.zcash_serialize(&mut writer)?;
+        Ok(())
+    }
+}
+
+impl ZcashDeserialize for tze::ExtensionData {
+    fn zcash_deserialize<R: io::Read>(mut reader: R) -> Result<Self, SerializationError> {
+        let inputs = Vec::zcash_deserialize(&mut reader)?;
+        let outputs = Vec::zcash_deserialize(&mut reader)?;
+        Ok(tze::ExtensionData { inputs, outputs })
+    }
+}
+
+impl ZcashSerialize for tze::Input {
+    fn zcash_serialize<W: io::Write>(&self, mut writer: W) -> Result<(), io::Error> {
+        self.prevout.zcash_serialize(&mut writer)?;
+        self.witness.zcash_serialize(&mut writer)?;
+        Ok(())
+    }
+}
+
+impl ZcashDeserialize for tze::Input {
+    fn zcash_deserialize<R: io::Read>(mut reader: R) -> Result<Self, SerializationError> {
+        let prevout = OutPoint::zcash_deserialize(&mut reader)?;
+        let witness = tze::ExtensionPayload::zcash_deserialize(&mut reader)?;
+        Ok(tze::Input { prevout, witness })
+    }
+}
+
+impl ZcashSerialize for tze::Output {
+    fn zcash_serialize<W: io::Write>(&self, mut writer: W) -> Result<(), io::Error> {
+        self.value.zcash_serialize(&mut writer)?;
+        self.precondition.zcash_serialize(&mut writer)?;
+        Ok(())
+    }
+}
+
+impl ZcashDeserialize for tze::Output {
+    fn zcash_deserialize<R: io::Read>(mut reader: R) -> Result<Self, SerializationError> {
+        let reader = &mut reader;
+
+        let value = reader.zcash_deserialize_into()?;
+        let precondition = tze::ExtensionPayload::zcash_deserialize(reader)?;
+        Ok(tze::Output {
+            value,
+            precondition,
+        })
+    }
+}
+
+impl ZcashSerialize for tze::ExtensionPayload {
+    fn zcash_serialize<W: io::Write>(&self, mut writer: W) -> Result<(), io::Error> {
+        writer.write_u32::<LittleEndian>(self.extension_id)?;
+        writer.write_u32::<LittleEndian>(self.mode)?;
+        zcash_serialize_bytes(&self.payload, &mut writer)
+    }
+}
+
+impl ZcashDeserialize for tze::ExtensionPayload {
+    fn zcash_deserialize<R: io::Read>(mut reader: R) -> Result<Self, SerializationError> {
+        let extension_id = reader.read_u32::<LittleEndian>()?;
+        let mode = reader.read_u32::<LittleEndian>()?;
+        let payload = Vec::zcash_deserialize(&mut reader)?;
+
+        Ok(tze::ExtensionPayload {
+            extension_id,
+            mode,
+            payload,
+        })
+    }
+}
+
 impl ZcashSerialize for Transaction {
     #[allow(clippy::unwrap_in_result)]
     fn zcash_serialize<W: io::Write>(&self, mut writer: W) -> Result<(), io::Error> {
@@ -682,6 +758,7 @@ impl ZcashSerialize for Transaction {
                 outputs,
                 sapling_shielded_data,
                 orchard_shielded_data,
+                tze_data,
             } => {
                 // Transaction V6 spec:
                 // https://zips.z.cash/zip-0230#specification
@@ -718,6 +795,9 @@ impl ZcashSerialize for Transaction {
                 // `flagsOrchard`,`valueBalanceOrchard`, `anchorOrchard`, `sizeProofsOrchard`,
                 // `proofsOrchard`, `vSpendAuthSigsOrchard`, and `bindingSigOrchard`.
                 orchard_shielded_data.zcash_serialize(&mut writer)?;
+
+                // A bundle for transparent zcash extensions.
+                tze_data.zcash_serialize(&mut writer)?;
 
                 // TODO: Add the rest of v6 transaction fields.
             }
@@ -972,6 +1052,56 @@ impl ZcashDeserialize for Transaction {
                     orchard_shielded_data,
                 })
             }
+            (6, true) => {
+                // Transaction V6
+
+                // Denoted as `nVersionGroupId` in the spec.
+                let id = limited_reader.read_u32::<LittleEndian>()?;
+                if id != TX_V5_VERSION_GROUP_ID {
+                    return Err(SerializationError::Parse("expected TX_V5_VERSION_GROUP_ID"));
+                }
+                // Denoted as `nConsensusBranchId` in the spec.
+                // Convert it to a NetworkUpgrade
+                let network_upgrade =
+                    NetworkUpgrade::try_from(limited_reader.read_u32::<LittleEndian>()?)?;
+
+                // Denoted as `lock_time` in the spec.
+                let lock_time = LockTime::zcash_deserialize(&mut limited_reader)?;
+
+                // Denoted as `nExpiryHeight` in the spec.
+                let expiry_height = block::Height(limited_reader.read_u32::<LittleEndian>()?);
+
+                // Denoted as `tx_in_count` and `tx_in` in the spec.
+                let inputs = Vec::zcash_deserialize(&mut limited_reader)?;
+
+                // Denoted as `tx_out_count` and `tx_out` in the spec.
+                let outputs = Vec::zcash_deserialize(&mut limited_reader)?;
+
+                // A bundle of fields denoted in the spec as `nSpendsSapling`, `vSpendsSapling`,
+                // `nOutputsSapling`,`vOutputsSapling`, `valueBalanceSapling`, `anchorSapling`,
+                // `vSpendProofsSapling`, `vSpendAuthSigsSapling`, `vOutputProofsSapling` and
+                // `bindingSigSapling`.
+                let sapling_shielded_data = (&mut limited_reader).zcash_deserialize_into()?;
+
+                // A bundle of fields denoted in the spec as `nActionsOrchard`, `vActionsOrchard`,
+                // `flagsOrchard`,`valueBalanceOrchard`, `anchorOrchard`, `sizeProofsOrchard`,
+                // `proofsOrchard`, `vSpendAuthSigsOrchard`, and `bindingSigOrchard`.
+                let orchard_shielded_data = (&mut limited_reader).zcash_deserialize_into()?;
+
+                // A bundle for transparent zcash extensions.
+                let tze_data = (&mut limited_reader).zcash_deserialize_into()?;
+
+                Ok(Transaction::V6 {
+                    network_upgrade,
+                    lock_time,
+                    expiry_height,
+                    inputs,
+                    outputs,
+                    sapling_shielded_data,
+                    orchard_shielded_data,
+                    tze_data,
+                })
+            }
             (_, _) => Err(SerializationError::Parse("bad tx header")),
         }
     }
@@ -1001,6 +1131,12 @@ pub(crate) const MIN_TRANSPARENT_INPUT_SIZE: u64 = 32 + 4 + 4 + 1;
 
 /// A Transparent output has an 8 byte value and script which takes a min of 1 byte.
 pub(crate) const MIN_TRANSPARENT_OUTPUT_SIZE: u64 = 8 + 1;
+
+/// A TZE inputs has an outpoint (32 byte hash + 4 byte index) and an arbitrary sized payload.
+pub(crate) const MIN_TZE_INPUT_SIZE: u64 = 32 + 4;
+
+/// A TZE output has a value (8 bytes) and a precondition (32 bytes)
+pub(crate) const MIN_TZE_OUTPUT_SIZE: u64 = 8 + 32;
 
 /// All txs must have at least one input, a 4 byte locktime, and at least one output.
 ///
@@ -1049,6 +1185,20 @@ impl TrustedPreallocate for transparent::Input {
 impl TrustedPreallocate for transparent::Output {
     fn max_allocation() -> u64 {
         MAX_BLOCK_BYTES / MIN_TRANSPARENT_OUTPUT_SIZE
+    }
+}
+
+/// The maximum number of TZE inputs in a valid Zcash on-chain transaction.
+impl TrustedPreallocate for tze::Input {
+    fn max_allocation() -> u64 {
+        MAX_BLOCK_BYTES / MIN_TZE_INPUT_SIZE
+    }
+}
+
+/// The maximum number of TZE outputs in a valid Zcash on-chain transaction.
+impl TrustedPreallocate for tze::Output {
+    fn max_allocation() -> u64 {
+        MAX_BLOCK_BYTES / MIN_TZE_OUTPUT_SIZE
     }
 }
 

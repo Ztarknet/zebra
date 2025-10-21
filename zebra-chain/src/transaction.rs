@@ -56,6 +56,7 @@ use crate::{
         self, outputs_from_utxos,
         CoinbaseSpendRestriction::{self, *},
     },
+    tze,
     value_balance::{ValueBalance, ValueBalanceError},
     Error,
 };
@@ -169,7 +170,8 @@ pub enum Transaction {
         sapling_shielded_data: Option<sapling::ShieldedData<sapling::SharedAnchor>>,
         /// The orchard data for this transaction, if any.
         orchard_shielded_data: Option<orchard::ShieldedData>,
-        // TODO: Add the rest of the v6 fields.
+        /// The TZE data for this transaction.
+        tze_data: tze::ExtensionData,
     },
 }
 

@@ -292,6 +292,17 @@ impl PrecomputedTxData {
     ) -> Option<sapling_crypto::Bundle<sapling_crypto::bundle::Authorized, ZatBalance>> {
         self.tx_data.sapling_bundle().cloned()
     }
+
+    /// Returns the TZE bundle in `tx_data`.
+    pub fn tze_bundle(
+        &self,
+    ) -> Option<
+        zcash_primitives::transaction::components::tze::Bundle<
+            zcash_primitives::transaction::components::tze::Authorized,
+        >,
+    > {
+        self.tx_data.tze_bundle().cloned()
+    }
 }
 
 /// Compute a signature hash using librustzcash.
