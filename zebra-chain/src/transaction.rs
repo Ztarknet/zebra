@@ -37,6 +37,8 @@ pub use sighash::{HashType, SigHash, SigHasher};
 pub use unmined::{
     zip317, UnminedTx, UnminedTxId, VerifiedUnminedTx, MEMPOOL_TRANSACTION_COST_THRESHOLD,
 };
+use zcash_primitives::extensions::transparent as tze;
+use zcash_primitives::transaction::components::tze::{TzeIn, TzeOut};
 use zcash_protocol::consensus;
 
 #[cfg(feature = "tx_v6")]
@@ -169,6 +171,20 @@ pub enum Transaction {
         sapling_shielded_data: Option<sapling::ShieldedData<sapling::SharedAnchor>>,
         /// The orchard data for this transaction, if any.
         orchard_shielded_data: Option<orchard::ShieldedData>,
+        /// TZE inputs
+        /// TODO(m-kus): derive serde in librustzcash
+        #[cfg_attr(
+            any(test, feature = "proptest-impl", feature = "elasticsearch"),
+            serde(skip)
+        )]
+        tze_inputs: Vec<TzeIn<tze::AuthData>>,
+        /// TZE outputs
+        /// /// TODO(m-kus): derive serde in librustzcash
+        #[cfg_attr(
+            any(test, feature = "proptest-impl", feature = "elasticsearch"),
+            serde(skip)
+        )]
+        tze_outputs: Vec<TzeOut>,
         // TODO: Add the rest of the v6 fields.
     },
 }
