@@ -169,7 +169,6 @@ pub enum Transaction {
         sapling_shielded_data: Option<sapling::ShieldedData<sapling::SharedAnchor>>,
         /// The orchard data for this transaction, if any.
         orchard_shielded_data: Option<orchard::ShieldedData>,
-        // TODO: Add the rest of the v6 fields.
     },
 }
 
@@ -396,7 +395,7 @@ impl Transaction {
             Transaction::V4 { .. } => 4,
             Transaction::V5 { .. } => 5,
             #[cfg(feature = "tx_v6")]
-            Transaction::V6 { .. } => 6,
+            Transaction::V6 { .. } => 0xffff, // ZFuture version
         }
     }
 
@@ -1494,7 +1493,7 @@ impl Transaction {
     /// If the tx contains a network upgrade, this network upgrade must match the passed `nu`. The
     /// passed `nu` must also contain a consensus branch id convertible to its `librustzcash`
     /// equivalent.
-    pub(crate) fn to_librustzcash(
+    pub fn to_librustzcash(
         &self,
         nu: NetworkUpgrade,
     ) -> Result<zcash_primitives::transaction::Transaction, crate::Error> {

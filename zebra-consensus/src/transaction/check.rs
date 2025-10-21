@@ -550,3 +550,58 @@ pub fn consensus_branch_id(
 
     Ok(())
 }
+
+/// Checks that the TZE extension IDs are consistent.
+///
+/// # Consensus
+///
+/// > If tx contains both TZE inputs and TZE outputs, they all MUST have the same extension ID.
+/// > If tx contains only TZE inputs or only TZE outputs, they can have different extension IDs.
+/// > A TZE input MUST spend a TZE output with the same extension ID.
+///
+/// <https://zips.z.cash/zip-0222#rationale>
+pub fn tze_extension_ids_consistent(
+    tx: &Transaction,
+    block_new_outputs: Arc<HashMap<transparent::OutPoint, transparent::OrderedUtxo>>,
+    spent_utxos: &HashMap<transparent::OutPoint, transparent::Utxo>,
+) -> Result<(), TransactionError> {
+    let tze_inputs = tx
+        .inputs()
+        .iter()
+        .filter(|input| input.is_tze())
+        .collect::<Vec<_>>();
+    let tze_outputs = tx
+        .outputs()
+        .iter()
+        .filter(|output| output.is_tze())
+        .collect::<Vec<_>>();
+
+    for input in tze_inputs.iter() {
+        let outpoint = input.outpoint().unwrap();
+        let utxo = block_new_outputs
+            .get(&outpoint)
+            .map(|ordered_utxo| ordered_utxo.utxo.clone())
+            .or_else(|| spent_utxos.get(&outpoint).cloned())
+            .expect("load_spent_utxos_fut.await should return an error if a utxo is missing");
+
+        if utxo.output.tze_data().unwrap().extension_id != input.tze_data().unwrap().extension_id {
+            return Err(TransactionError::TzeExtensionIdsNotConsistent);
+        }
+    }
+
+    if !tze_inputs.is_empty() && !tze_outputs.is_empty() {
+        let tze_extension_id = tze_inputs[0].tze_data().unwrap().extension_id;
+        for input in tze_inputs {
+            if input.tze_data().unwrap().extension_id != tze_extension_id {
+                return Err(TransactionError::TzeExtensionIdsNotConsistent);
+            }
+        }
+        for output in tze_outputs {
+            if output.tze_data().unwrap().extension_id != tze_extension_id {
+                return Err(TransactionError::TzeExtensionIdsNotConsistent);
+            }
+        }
+    }
+
+    Ok(())
+}

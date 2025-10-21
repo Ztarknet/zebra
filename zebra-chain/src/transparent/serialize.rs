@@ -5,12 +5,14 @@ use std::io;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
 use crate::{
+    amount::Amount,
     block::{self, Height},
     serialization::{
-        zcash_serialize_bytes, FakeWriter, ReadZcashExt, SerializationError, ZcashDeserialize,
-        ZcashDeserializeInto, ZcashSerialize,
+        zcash_serialize_bytes, CompactSizeMessage, FakeWriter, ReadZcashExt, SerializationError,
+        ZcashDeserialize, ZcashDeserializeInto, ZcashSerialize,
     },
     transaction,
+    transparent::{ExtendedScript, TzeData},
 };
 
 use super::{CoinbaseData, Input, OutPoint, Output, Script};
@@ -262,7 +264,7 @@ impl ZcashSerialize for Input {
                 sequence,
             } => {
                 outpoint.zcash_serialize(&mut writer)?;
-                unlock_script.zcash_serialize(&mut writer)?;
+                unlock_script.to_script().zcash_serialize(&mut writer)?;
                 writer.write_u32::<LittleEndian>(*sequence)?;
             }
             Input::Coinbase {
@@ -319,7 +321,7 @@ impl ZcashDeserialize for Input {
                     hash: transaction::Hash(bytes),
                     index: reader.read_u32::<LittleEndian>()?,
                 },
-                unlock_script: Script::zcash_deserialize(&mut reader)?,
+                unlock_script: ExtendedScript::from_script(Script::zcash_deserialize(&mut reader)?),
                 sequence: reader.read_u32::<LittleEndian>()?,
             })
         }
@@ -329,7 +331,7 @@ impl ZcashDeserialize for Input {
 impl ZcashSerialize for Output {
     fn zcash_serialize<W: io::Write>(&self, mut writer: W) -> Result<(), io::Error> {
         self.value.zcash_serialize(&mut writer)?;
-        self.lock_script.zcash_serialize(&mut writer)?;
+        self.lock_script.to_script().zcash_serialize(&mut writer)?;
         Ok(())
     }
 }
@@ -340,7 +342,133 @@ impl ZcashDeserialize for Output {
 
         Ok(Output {
             value: reader.zcash_deserialize_into()?,
-            lock_script: Script::zcash_deserialize(reader)?,
+            lock_script: ExtendedScript::from_script(Script::zcash_deserialize(reader)?),
         })
     }
+}
+
+impl ZcashSerialize for TzeData {
+    fn zcash_serialize<W: io::Write>(&self, mut writer: W) -> Result<(), io::Error> {
+        let extension_id: CompactSizeMessage = (self.extension_id as usize)
+            .try_into()
+            .expect("extension_id fits in MAX_PROTOCOL_MESSAGE_LEN");
+        let mode: CompactSizeMessage = (self.mode as usize)
+            .try_into()
+            .expect("mode fits in MAX_PROTOCOL_MESSAGE_LEN");
+        extension_id.zcash_serialize(&mut writer)?;
+        mode.zcash_serialize(&mut writer)?;
+        zcash_serialize_bytes(&self.payload, &mut writer)?;
+        Ok(())
+    }
+}
+
+impl ZcashDeserialize for TzeData {
+    fn zcash_deserialize<R: io::Read>(mut reader: R) -> Result<Self, SerializationError> {
+        let extension_id = CompactSizeMessage::zcash_deserialize(&mut reader)?;
+        let mode = CompactSizeMessage::zcash_deserialize(&mut reader)?;
+        Ok(TzeData {
+            extension_id: Into::<usize>::into(extension_id) as u32,
+            mode: Into::<usize>::into(mode) as u32,
+            payload: reader.zcash_deserialize_into()?,
+        })
+    }
+}
+
+/// Serialize a list of TZE inputs.
+pub fn zcash_serialize_tze_inputs<W: io::Write>(
+    inputs: &[Input],
+    mut writer: W,
+) -> Result<(), std::io::Error> {
+    let len: CompactSizeMessage = inputs
+        .len()
+        .try_into()
+        .expect("len fits in MAX_PROTOCOL_MESSAGE_LEN");
+    len.zcash_serialize(&mut writer)?;
+    for input in inputs {
+        match input {
+            Input::PrevOut {
+                outpoint,
+                unlock_script,
+                ..
+            } => {
+                outpoint.zcash_serialize(&mut writer)?;
+                match unlock_script {
+                    ExtendedScript::Extension(tze_data) => tze_data.zcash_serialize(&mut writer)?,
+                    _ => {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "expected TZE input",
+                        ))
+                    }
+                }
+            }
+            _ => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "expected TZE input",
+                ))
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Serialize a list of TZE outputs.
+pub fn zcash_serialize_tze_outputs<W: io::Write>(
+    outputs: &[Output],
+    mut writer: W,
+) -> Result<(), std::io::Error> {
+    let len: CompactSizeMessage = outputs
+        .len()
+        .try_into()
+        .expect("len fits in MAX_PROTOCOL_MESSAGE_LEN");
+    len.zcash_serialize(&mut writer)?;
+    for output in outputs {
+        output.value.zcash_serialize(&mut writer)?;
+        match &output.lock_script {
+            ExtendedScript::Extension(tze_data) => tze_data.zcash_serialize(&mut writer)?,
+            _ => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "expected TZE output",
+                ))
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Deserialize a list of TZE inputs.
+pub fn zcash_deserialize_tze_inputs<R: io::Read>(
+    mut reader: R,
+) -> Result<Vec<Input>, SerializationError> {
+    let len = CompactSizeMessage::zcash_deserialize(&mut reader)?;
+    let mut inputs = Vec::new();
+    for _ in 0..len.into() {
+        let outpoint = OutPoint::zcash_deserialize(&mut reader)?;
+        let tze_data = TzeData::zcash_deserialize(&mut reader)?;
+        inputs.push(Input::PrevOut {
+            outpoint,
+            unlock_script: ExtendedScript::Extension(tze_data),
+            sequence: 0,
+        });
+    }
+    Ok(inputs)
+}
+
+/// Deserialize a list of TZE outputs.
+pub fn zcash_deserialize_tze_outputs<R: io::Read>(
+    mut reader: R,
+) -> Result<Vec<Output>, SerializationError> {
+    let len = CompactSizeMessage::zcash_deserialize(&mut reader)?;
+    let mut outputs = Vec::new();
+    for _ in 0..len.into() {
+        let value = Amount::zcash_deserialize(&mut reader)?;
+        let tze_data = TzeData::zcash_deserialize(&mut reader)?;
+        outputs.push(Output {
+            value,
+            lock_script: ExtendedScript::Extension(tze_data),
+        });
+    }
+    Ok(outputs)
 }

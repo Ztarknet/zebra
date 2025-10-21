@@ -15,11 +15,14 @@ use thiserror::Error;
 
 use libzcash_script::ZcashScript;
 
+use zcash_extensions::consensus::transparent::{epoch_for_branch, Context};
+use zcash_primitives::extensions::transparent::{AuthData, Precondition, Witness};
 use zcash_script::script;
 use zebra_chain::{
+    block::Height,
     parameters::NetworkUpgrade,
     transaction::{HashType, SigHasher},
-    transparent,
+    transparent::{self, TzeData},
 };
 
 /// An Error type representing the error codes returned from zcash_script.
@@ -36,6 +39,10 @@ pub enum Error {
     Unknown(libzcash_script::Error),
     /// transaction is invalid according to zebra_chain (not a zcash_script error)
     TxInvalid(#[from] zebra_chain::Error),
+    /// TZE is not supported for the current network upgrade
+    TzeUnsupported,
+    /// TZE verificationerror
+    TzeVerificationError(String),
 }
 
 impl fmt::Display for Error {
@@ -48,6 +55,10 @@ impl fmt::Display for Error {
             }
             Error::Unknown(e) => format!("unknown error from zcash_script: {e:?}"),
             Error::TxInvalid(e) => format!("tx is invalid: {e}"),
+            Error::TzeUnsupported => {
+                "TZE is not supported for the current network upgrade".to_owned()
+            }
+            Error::TzeVerificationError(e) => format!("TZE verification error: {e}"),
         })
     }
 }
@@ -90,6 +101,12 @@ pub struct CachedFfiTransaction {
 
     /// The sighasher context to use to compute sighashes.
     sighasher: SigHasher,
+
+    /// The height of the block containing the transaction.
+    block_height: Height,
+
+    /// Active network upgrade.
+    nu: NetworkUpgrade,
 }
 
 impl CachedFfiTransaction {
@@ -100,12 +117,15 @@ impl CachedFfiTransaction {
         transaction: Arc<zebra_chain::transaction::Transaction>,
         all_previous_outputs: Arc<Vec<transparent::Output>>,
         nu: NetworkUpgrade,
+        block_height: Height,
     ) -> Result<Self, Error> {
         let sighasher = transaction.sighasher(nu, all_previous_outputs.clone())?;
         Ok(Self {
             transaction,
             all_previous_outputs,
             sighasher,
+            block_height,
+            nu,
         })
     }
 
@@ -138,8 +158,23 @@ impl CachedFfiTransaction {
             value: _,
             lock_script,
         } = previous_output;
-        let script_pub_key: &[u8] = lock_script.as_raw_bytes();
 
+        match lock_script {
+            transparent::ExtendedScript::Bytecode(script) => {
+                let script_pub_key = script.as_raw_bytes();
+                self.is_valid_script_pub_key(input_index, script_pub_key)
+            }
+            transparent::ExtendedScript::Extension(tze_data) => {
+                self.is_valid_tze_call(input_index, tze_data.clone())
+            }
+        }
+    }
+
+    fn is_valid_script_pub_key(
+        &self,
+        input_index: usize,
+        script_pub_key: &[u8],
+    ) -> Result<(), Error> {
         let flags = zcash_script::interpreter::Flags::P2SH
             | zcash_script::interpreter::Flags::CHECKLOCKTIMEVERIFY;
 
@@ -150,7 +185,12 @@ impl CachedFfiTransaction {
                 outpoint: _,
                 unlock_script,
                 sequence: _,
-            } => unlock_script.as_raw_bytes(),
+            } => unlock_script
+                .try_as_script()
+                .ok_or(Error::TxInvalid(zebra_chain::Error::Conversion(format!(
+                    "input {input_index} points at a TZE output"
+                ))))?
+                .as_raw_bytes(),
             transparent::Input::Coinbase { .. } => Err(Error::TxCoinbase)?,
         };
 
@@ -186,6 +226,29 @@ impl CachedFfiTransaction {
                 }
             })
     }
+
+    fn is_valid_tze_call(&self, input_index: usize, precondition: TzeData) -> Result<(), Error> {
+        let branch_id: zcash_protocol::consensus::BranchId = self.nu.try_into()?;
+        let Some(epoch) = epoch_for_branch(branch_id) else {
+            return Err(Error::TzeUnsupported);
+        };
+
+        let witness = match &self.transaction.inputs()[input_index] {
+            transparent::Input::PrevOut { unlock_script, .. } => unlock_script
+                .try_as_extension()
+                .ok_or(Error::ScriptInvalid)?,
+            _ => return Err(Error::TxCoinbase),
+        };
+
+        let transaction = self.transaction.to_librustzcash(self.nu)?;
+        let context = Context::new(self.block_height.into(), &transaction);
+        let witness: Witness<AuthData> = witness.clone().into();
+        let precondition: Precondition = precondition.into();
+
+        epoch
+            .verify(&precondition, &witness, &context)
+            .map_err(|e| Error::TzeVerificationError(e.to_string()))
+    }
 }
 
 /// Trait for counting the number of transparent signature operations
@@ -214,12 +277,16 @@ impl Sigops for zebra_chain::transaction::Transaction {
         self.inputs()
             .iter()
             .filter_map(|input| match input {
-                transparent::Input::PrevOut { unlock_script, .. } => {
-                    Some(unlock_script.as_raw_bytes())
-                }
+                transparent::Input::PrevOut { unlock_script, .. } => match unlock_script {
+                    transparent::ExtendedScript::Bytecode(script) => Some(script.as_raw_bytes()),
+                    transparent::ExtendedScript::Extension(_) => None,
+                },
                 transparent::Input::Coinbase { .. } => None,
             })
-            .chain(self.outputs().iter().map(|o| o.lock_script.as_raw_bytes()))
+            .chain(self.outputs().iter().filter_map(|o| match &o.lock_script {
+                transparent::ExtendedScript::Bytecode(script) => Some(script.as_raw_bytes()),
+                transparent::ExtendedScript::Extension(_) => None,
+            }))
     }
 }
 

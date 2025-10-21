@@ -43,7 +43,7 @@ fn accept_shielded_mature_coinbase_utxo_spend() {
     };
     let output = transparent::Output {
         value: Amount::zero(),
-        lock_script: transparent::Script::new(&[]),
+        lock_script: transparent::Script::new(&[]).into(),
     };
     let ordered_utxo = transparent::OrderedUtxo::new(output, created_height, 0);
 
@@ -74,7 +74,7 @@ fn reject_unshielded_coinbase_utxo_spend() {
     };
     let output = transparent::Output {
         value: Amount::zero(),
-        lock_script: transparent::Script::new(&[]),
+        lock_script: transparent::Script::new(&[]).into(),
     };
     let ordered_utxo = transparent::OrderedUtxo::new(output, created_height, 0);
 
@@ -97,7 +97,7 @@ fn reject_immature_coinbase_utxo_spend() {
     };
     let output = transparent::Output {
         value: Amount::zero(),
-        lock_script: transparent::Script::new(&[]),
+        lock_script: transparent::Script::new(&[]).into(),
     };
     let ordered_utxo = transparent::OrderedUtxo::new(output, created_height, 0);
 
