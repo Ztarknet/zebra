@@ -22,8 +22,8 @@ pub use address::Address;
 pub use script::Script;
 pub use serialize::{GENESIS_COINBASE_DATA, MAX_COINBASE_DATA_LEN, MAX_COINBASE_HEIGHT_DATA_LEN};
 pub use utxo::{
-    new_ordered_outputs, new_outputs, outputs_from_utxos, utxos_from_ordered_utxos,
-    CoinbaseSpendRestriction, OrderedUtxo, Utxo,
+    new_ordered_outputs, new_outputs, outputs_from_utxos, utxos_from_ordered_utxos, tze_outputs_from_utxos,
+    CoinbaseSpendRestriction, OrderedUtxo, Utxo, TzeUtxo
 };
 
 #[cfg(any(test, feature = "proptest-impl"))]
@@ -512,4 +512,79 @@ impl AddAssign<u32> for OutputIndex {
     fn add_assign(&mut self, rhs: u32) {
         self.0 += rhs
     }
+}
+
+#[derive(Default, Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(
+    any(test, feature = "proptest-impl", feature = "elasticsearch"),
+    derive(Serialize)
+)]
+pub struct TzeBundle {
+    pub inputs: Vec<TzeIn>,
+    pub outputs: Vec<TzeOut>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(
+    any(test, feature = "proptest-impl", feature = "elasticsearch"),
+    derive(Serialize)
+)]
+pub struct TzeIn {
+    pub prevout: OutPoint,
+    pub witness: TzeData,
+}
+
+impl TzeIn {
+    /// Get the value spent by this input, by looking up its [`OutPoint`] in `outputs`.
+    /// See [`Self::value`] for details.
+    ///
+    /// # Panics
+    ///
+    /// If the provided [`Output`]s don't have this input's [`OutPoint`].
+    pub(crate) fn value_from_outputs(
+        &self,
+        outputs: &HashMap<OutPoint, TzeOut>,
+    ) -> Amount<NonNegative> {
+        outputs
+            .get(&self.prevout)
+            .unwrap_or_else(|| {
+                panic!(
+                    "provided Outputs (length {:?}) don't have spent {:?}",
+                    outputs.len(),
+                    self.prevout
+            )
+            })
+            .value
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(any(test, feature = "proptest-impl"), derive(proptest_derive::Arbitrary, Deserialize))]
+#[cfg_attr(
+    any(test, feature = "proptest-impl", feature = "elasticsearch"),
+    derive(Serialize)
+)]
+pub struct TzeOut {
+    pub value: Amount<NonNegative>,
+    pub precondition: TzeData,
+}
+
+impl TzeOut {
+    /// Get the value contained in this output.
+    /// This amount is subtracted from the transaction value pool by this output.
+    pub fn value(&self) -> Amount<NonNegative> {
+        self.value
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(any(test, feature = "proptest-impl"), derive(proptest_derive::Arbitrary, Deserialize))]
+#[cfg_attr(
+    any(test, feature = "proptest-impl", feature = "elasticsearch"),
+    derive(Serialize)
+)]
+pub struct TzeData {
+    pub extension_id: u32,
+    pub mode: u32,
+    pub payload: Vec<u8>,
 }

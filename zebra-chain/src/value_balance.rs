@@ -204,6 +204,7 @@ impl ValueBalance<NonNegative> {
         self,
         transaction: impl Borrow<Transaction>,
         utxos: &HashMap<transparent::OutPoint, transparent::Output>,
+        tze_utxos: &HashMap<transparent::OutPoint, transparent::TzeOut>,
     ) -> Result<ValueBalance<NonNegative>, ValueBalanceError> {
         use std::ops::Neg;
 
@@ -211,7 +212,7 @@ impl ValueBalance<NonNegative> {
         // transaction value balances (inputs - outputs)
         let chain_value_pool_change = transaction
             .borrow()
-            .value_balance_from_outputs(utxos)?
+            .value_balance_from_outputs(utxos, tze_utxos)?
             .neg();
 
         self.add_chain_value_pool_change(chain_value_pool_change)

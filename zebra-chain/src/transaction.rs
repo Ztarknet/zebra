@@ -53,10 +53,9 @@ use crate::{
     serialization::ZcashSerialize,
     sprout,
     transparent::{
-        self, outputs_from_utxos,
+        self, outputs_from_utxos, tze_outputs_from_utxos,
         CoinbaseSpendRestriction::{self, *},
     },
-    tze,
     value_balance::{ValueBalance, ValueBalanceError},
     Error,
 };
@@ -171,7 +170,7 @@ pub enum Transaction {
         /// The orchard data for this transaction, if any.
         orchard_shielded_data: Option<orchard::ShieldedData>,
         /// The TZE data for this transaction.
-        tze_data: tze::ExtensionData,
+        tze_data: transparent::TzeBundle,
     },
 }
 
@@ -544,6 +543,15 @@ impl Transaction {
         }
     }
 
+    /// Access the TZE inputs of this transaction, regardless of version.
+    pub fn tze_inputs(&self) -> &[transparent::TzeIn] {
+        match self {
+            #[cfg(feature = "tx_v6")]
+            Transaction::V6 { ref tze_data, .. } => &tze_data.inputs,
+            _ => &[],
+        }
+    }
+
     /// Access the [`transparent::OutPoint`]s spent by this transaction's [`transparent::Input`]s.
     pub fn spent_outpoints(&self) -> impl Iterator<Item = transparent::OutPoint> + '_ {
         self.inputs()
@@ -561,6 +569,15 @@ impl Transaction {
             Transaction::V5 { ref outputs, .. } => outputs,
             #[cfg(feature = "tx_v6")]
             Transaction::V6 { ref outputs, .. } => outputs,
+        }
+    }
+
+    /// Access the TZE outputs of this transaction, regardless of version.
+    pub fn tze_outputs(&self) -> &[transparent::TzeOut] {
+        match self {
+            #[cfg(feature = "tx_v6")]
+            Transaction::V6 { ref tze_data, .. } => &tze_data.outputs,
+            _ => &[],
         }
     }
 
@@ -1130,11 +1147,13 @@ impl Transaction {
     fn transparent_value_balance_from_outputs(
         &self,
         outputs: &HashMap<transparent::OutPoint, transparent::Output>,
+        tze_outputs: &HashMap<transparent::OutPoint, transparent::TzeOut>,
     ) -> Result<ValueBalance<NegativeAllowed>, ValueBalanceError> {
         let input_value = self
             .inputs()
             .iter()
             .map(|i| i.value_from_outputs(outputs))
+            .chain(self.tze_inputs().iter().map(|i| i.value_from_outputs(tze_outputs)))
             .sum::<Result<Amount<NonNegative>, AmountError>>()
             .map_err(ValueBalanceError::Transparent)?
             .constrain()
@@ -1144,6 +1163,7 @@ impl Transaction {
             .outputs()
             .iter()
             .map(|o| o.value())
+            .chain(self.tze_outputs().iter().map(|o| o.value))
             .sum::<Result<Amount<NonNegative>, AmountError>>()
             .map_err(ValueBalanceError::Transparent)?
             .constrain()
@@ -1457,8 +1477,9 @@ impl Transaction {
     pub(crate) fn value_balance_from_outputs(
         &self,
         outputs: &HashMap<transparent::OutPoint, transparent::Output>,
+        tze_outputs: &HashMap<transparent::OutPoint, transparent::TzeOut>,
     ) -> Result<ValueBalance<NegativeAllowed>, ValueBalanceError> {
-        self.transparent_value_balance_from_outputs(outputs)?
+        self.transparent_value_balance_from_outputs(outputs, tze_outputs)?
             + self.sprout_value_balance()?
             + self.sapling_value_balance()
             + self.orchard_value_balance()
@@ -1487,8 +1508,9 @@ impl Transaction {
     pub fn value_balance(
         &self,
         utxos: &HashMap<transparent::OutPoint, transparent::Utxo>,
+        tze_utxos: &HashMap<transparent::OutPoint, transparent::TzeUtxo>,
     ) -> Result<ValueBalance<NegativeAllowed>, ValueBalanceError> {
-        self.value_balance_from_outputs(&outputs_from_utxos(utxos.clone()))
+        self.value_balance_from_outputs(&outputs_from_utxos(utxos.clone()), &tze_outputs_from_utxos(tze_utxos.clone()))
     }
 
     /// Converts [`Transaction`] to [`zcash_primitives::transaction::Transaction`].

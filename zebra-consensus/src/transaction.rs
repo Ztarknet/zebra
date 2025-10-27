@@ -1029,7 +1029,27 @@ where
         script_verifier: script::Verifier,
         cached_ffi_transaction: Arc<CachedFfiTransaction>,
     ) -> Result<AsyncChecks, TransactionError> {
-        Self::verify_v5_transaction(request, network, script_verifier, cached_ffi_transaction)
+        let transaction = request.transaction();
+        let nu = request.upgrade(network);
+
+        Self::verify_v5_transaction_network_upgrade(&transaction, nu)?;
+
+        let sapling_bundle = cached_ffi_transaction.sighasher().sapling_bundle();
+        let orchard_bundle = cached_ffi_transaction.sighasher().orchard_bundle();
+        let tze_bundle = cached_ffi_transaction.sighasher().tze_bundle();
+
+        let sighash = cached_ffi_transaction
+            .sighasher()
+            .sighash(HashType::ALL, None);
+
+        Ok(Self::verify_transparent_inputs_and_outputs(
+            request,
+            script_verifier,
+            cached_ffi_transaction,
+        )?
+        .and(Self::verify_sapling_bundle(sapling_bundle, &sighash))
+        .and(Self::verify_orchard_bundle(orchard_bundle, &sighash))
+        .and(Self::verify_tze_bundle(tze_bundle, &sighash)))
     }
 
     /// Verifies if a transaction's transparent inputs are valid using the provided
@@ -1224,6 +1244,18 @@ where
         }
 
         async_checks
+    }
+
+    /// Verifies a transaction's TZE inputs and outputs.
+    fn verify_tze_bundle(
+        bundle: Option<zcash_primitives::transaction::components::tze::Bundle<zcash_primitives::transaction::components::tze::Authorized>>,
+        sighash: &SigHash,
+    ) -> AsyncChecks {
+        let mut async_checks = AsyncChecks::new();
+
+        if let Some(bundle) = bundle {
+            //async_checks.push();
+        }
     }
 }
 

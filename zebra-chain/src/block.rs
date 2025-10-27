@@ -228,12 +228,13 @@ impl Block {
     pub fn chain_value_pool_change(
         &self,
         utxos: &HashMap<transparent::OutPoint, transparent::Utxo>,
+        tze_utxos: &HashMap<transparent::OutPoint, transparent::TzeUtxo>,
         deferred_pool_balance_change: Option<DeferredPoolBalanceChange>,
     ) -> Result<ValueBalance<NegativeAllowed>, ValueBalanceError> {
         Ok(*self
             .transactions
             .iter()
-            .flat_map(|t| t.value_balance(utxos))
+            .flat_map(|t| t.value_balance(utxos, tze_utxos))
             .sum::<Result<ValueBalance<NegativeAllowed>, _>>()?
             .neg()
             .set_deferred_amount(

@@ -27,6 +27,17 @@ pub struct Utxo {
     pub from_coinbase: bool,
 }
 
+/// An unspent `transparent::TzeOut`, with accompanying metadata.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(
+    any(test, feature = "proptest-impl"),
+    derive(proptest_derive::Arbitrary, serde::Serialize)
+)]
+pub struct TzeUtxo {
+    pub output: transparent::TzeOut,
+    pub height: block::Height,
+}
+
 /// A [`Utxo`], and the index of its transaction within its block.
 ///
 /// This extra index is used to check that spends come after outputs,
@@ -153,6 +164,16 @@ pub fn utxos_from_ordered_utxos(
 pub fn outputs_from_utxos(
     utxos: HashMap<transparent::OutPoint, Utxo>,
 ) -> HashMap<transparent::OutPoint, transparent::Output> {
+    utxos
+        .into_iter()
+        .map(|(outpoint, utxo)| (outpoint, utxo.output))
+        .collect()
+}
+
+/// Compute an index of [`transparent::TzeOut`]s, given an index of [`TzeUtxo`]s.
+pub fn tze_outputs_from_utxos(
+    utxos: HashMap<transparent::OutPoint, TzeUtxo>,
+) -> HashMap<transparent::OutPoint, transparent::TzeOut> {
     utxos
         .into_iter()
         .map(|(outpoint, utxo)| (outpoint, utxo.output))

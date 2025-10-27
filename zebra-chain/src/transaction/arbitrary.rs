@@ -301,6 +301,7 @@ impl Transaction {
         &mut self,
         chain_value_pools: ValueBalance<NonNegative>,
         outputs: &HashMap<transparent::OutPoint, transparent::Output>,
+        tze_outputs: &HashMap<transparent::OutPoint, transparent::TzeOut>,
     ) -> Result<(Amount<NonNegative>, ValueBalance<NonNegative>), ValueBalanceError> {
         self.fix_overflow();
 
@@ -347,17 +348,17 @@ impl Transaction {
             }
         }
 
-        let remaining_transaction_value = self.fix_remaining_value(outputs)?;
+        let remaining_transaction_value = self.fix_remaining_value(outputs, tze_outputs)?;
 
         // check our calculations are correct
         let transaction_chain_value_pool_change =
             self
-            .value_balance_from_outputs(outputs)
+            .value_balance_from_outputs(outputs, tze_outputs)
             .expect("chain value pool and remaining transaction value fixes produce valid transaction value balances")
             .neg();
 
         let chain_value_pools = chain_value_pools
-            .add_transaction(self, outputs)
+            .add_transaction(self, outputs, tze_outputs)
             .unwrap_or_else(|err| {
                 panic!(
                     "unexpected chain value pool error: {err:?}, \n\
@@ -380,11 +381,13 @@ impl Transaction {
     fn input_value_pool(
         &self,
         outputs: &HashMap<transparent::OutPoint, transparent::Output>,
+        tze_outputs: &HashMap<transparent::OutPoint, transparent::TzeOut>,
     ) -> Result<Amount<NonNegative>, ValueBalanceError> {
         let transparent_inputs = self
             .inputs()
             .iter()
             .map(|input| input.value_from_outputs(outputs))
+            .chain(self.tze_inputs().iter().map(|input| input.value_from_outputs(tze_outputs)))
             .sum::<Result<Amount<NonNegative>, amount::Error>>()
             .map_err(ValueBalanceError::Transparent)?;
         // TODO: fix callers which cause overflows, check for:
@@ -440,6 +443,7 @@ impl Transaction {
     pub fn fix_remaining_value(
         &mut self,
         outputs: &HashMap<transparent::OutPoint, transparent::Output>,
+        tze_outputs: &HashMap<transparent::OutPoint, transparent::TzeOut>,
     ) -> Result<Amount<NonNegative>, ValueBalanceError> {
         if self.is_coinbase() {
             // TODO: if needed, fixup coinbase:
@@ -452,7 +456,7 @@ impl Transaction {
             return Ok(Amount::zero());
         }
 
-        let mut remaining_input_value = self.input_value_pool(outputs)?;
+        let mut remaining_input_value = self.input_value_pool(outputs, tze_outputs)?;
 
         // assign remaining input value to outputs,
         // zeroing any outputs that would exceed the input value
@@ -499,7 +503,7 @@ impl Transaction {
 
         // check our calculations are correct
         let remaining_transaction_value = self
-            .value_balance_from_outputs(outputs)
+            .value_balance_from_outputs(outputs, tze_outputs)
             .expect("chain is limited to MAX_MONEY")
             .remaining_transaction_value()
             .unwrap_or_else(|err| {

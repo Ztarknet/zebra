@@ -137,4 +137,11 @@ impl SigHasher {
     ) -> Option<sapling_crypto::Bundle<sapling_crypto::bundle::Authorized, ZatBalance>> {
         self.precomputed_tx_data.sapling_bundle()
     }
+
+    /// Returns the TZE bundle in the precomputed transaction data.
+    pub fn tze_bundle(
+        &self,
+    ) -> Option<zcash_primitives::transaction::components::tze::Bundle<zcash_primitives::transaction::components::tze::Authorized>> {
+        self.precomputed_tx_data.tze_bundle()
+    }
 }

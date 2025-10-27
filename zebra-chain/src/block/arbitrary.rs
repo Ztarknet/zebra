@@ -617,8 +617,12 @@ where
     // delete invalid inputs
     *transaction.inputs_mut() = new_inputs;
 
+    let mut spent_tze_outputs = HashMap::new();
+
+    // TODO(m-kus): implement tze spends
+    
     let (_remaining_transaction_value, new_chain_value_pools) = transaction
-        .fix_chain_value_pools(*chain_value_pools, &spent_outputs)
+        .fix_chain_value_pools(*chain_value_pools, &spent_outputs, &spent_tze_outputs)
         .expect("value fixes produce valid chain value pools and remaining transaction values");
 
     // TODO: if needed, check output count here as well

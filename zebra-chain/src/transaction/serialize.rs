@@ -18,7 +18,7 @@ use crate::{
         zcash_serialize_external_count, AtLeastOne, ReadZcashExt, SerializationError,
         TrustedPreallocate, ZcashDeserialize, ZcashDeserializeInto, ZcashSerialize,
     },
-    transparent::OutPoint,
+    transparent,
 };
 
 use super::*;
@@ -464,7 +464,7 @@ impl<T: reddsa::SigType> ZcashDeserialize for reddsa::Signature<T> {
     }
 }
 
-impl ZcashSerialize for tze::ExtensionData {
+impl ZcashSerialize for transparent::TzeBundle {
     fn zcash_serialize<W: io::Write>(&self, mut writer: W) -> Result<(), io::Error> {
         self.inputs.zcash_serialize(&mut writer)?;
         self.outputs.zcash_serialize(&mut writer)?;
@@ -472,15 +472,15 @@ impl ZcashSerialize for tze::ExtensionData {
     }
 }
 
-impl ZcashDeserialize for tze::ExtensionData {
+impl ZcashDeserialize for transparent::TzeBundle {
     fn zcash_deserialize<R: io::Read>(mut reader: R) -> Result<Self, SerializationError> {
         let inputs = Vec::zcash_deserialize(&mut reader)?;
         let outputs = Vec::zcash_deserialize(&mut reader)?;
-        Ok(tze::ExtensionData { inputs, outputs })
+        Ok(transparent::TzeBundle { inputs, outputs })
     }
 }
 
-impl ZcashSerialize for tze::Input {
+impl ZcashSerialize for transparent::TzeIn {
     fn zcash_serialize<W: io::Write>(&self, mut writer: W) -> Result<(), io::Error> {
         self.prevout.zcash_serialize(&mut writer)?;
         self.witness.zcash_serialize(&mut writer)?;
@@ -488,15 +488,15 @@ impl ZcashSerialize for tze::Input {
     }
 }
 
-impl ZcashDeserialize for tze::Input {
+impl ZcashDeserialize for transparent::TzeIn {
     fn zcash_deserialize<R: io::Read>(mut reader: R) -> Result<Self, SerializationError> {
-        let prevout = OutPoint::zcash_deserialize(&mut reader)?;
-        let witness = tze::ExtensionPayload::zcash_deserialize(&mut reader)?;
-        Ok(tze::Input { prevout, witness })
+        let prevout = transparent::OutPoint::zcash_deserialize(&mut reader)?;
+        let witness = transparent::TzeData::zcash_deserialize(&mut reader)?;
+        Ok(transparent::TzeIn { prevout, witness })
     }
 }
 
-impl ZcashSerialize for tze::Output {
+impl ZcashSerialize for transparent::TzeOut {
     fn zcash_serialize<W: io::Write>(&self, mut writer: W) -> Result<(), io::Error> {
         self.value.zcash_serialize(&mut writer)?;
         self.precondition.zcash_serialize(&mut writer)?;
@@ -504,20 +504,20 @@ impl ZcashSerialize for tze::Output {
     }
 }
 
-impl ZcashDeserialize for tze::Output {
+impl ZcashDeserialize for transparent::TzeOut {
     fn zcash_deserialize<R: io::Read>(mut reader: R) -> Result<Self, SerializationError> {
         let reader = &mut reader;
 
         let value = reader.zcash_deserialize_into()?;
-        let precondition = tze::ExtensionPayload::zcash_deserialize(reader)?;
-        Ok(tze::Output {
+        let precondition = transparent::TzeData::zcash_deserialize(reader)?;
+        Ok(transparent::TzeOut {
             value,
             precondition,
         })
     }
 }
 
-impl ZcashSerialize for tze::ExtensionPayload {
+impl ZcashSerialize for transparent::TzeData {
     fn zcash_serialize<W: io::Write>(&self, mut writer: W) -> Result<(), io::Error> {
         writer.write_u32::<LittleEndian>(self.extension_id)?;
         writer.write_u32::<LittleEndian>(self.mode)?;
@@ -525,13 +525,13 @@ impl ZcashSerialize for tze::ExtensionPayload {
     }
 }
 
-impl ZcashDeserialize for tze::ExtensionPayload {
+impl ZcashDeserialize for transparent::TzeData {
     fn zcash_deserialize<R: io::Read>(mut reader: R) -> Result<Self, SerializationError> {
         let extension_id = reader.read_u32::<LittleEndian>()?;
         let mode = reader.read_u32::<LittleEndian>()?;
         let payload = Vec::zcash_deserialize(&mut reader)?;
 
-        Ok(tze::ExtensionPayload {
+        Ok(transparent::TzeData {
             extension_id,
             mode,
             payload,
@@ -1189,14 +1189,14 @@ impl TrustedPreallocate for transparent::Output {
 }
 
 /// The maximum number of TZE inputs in a valid Zcash on-chain transaction.
-impl TrustedPreallocate for tze::Input {
+impl TrustedPreallocate for transparent::TzeIn {
     fn max_allocation() -> u64 {
         MAX_BLOCK_BYTES / MIN_TZE_INPUT_SIZE
     }
 }
 
 /// The maximum number of TZE outputs in a valid Zcash on-chain transaction.
-impl TrustedPreallocate for tze::Output {
+impl TrustedPreallocate for transparent::TzeOut {
     fn max_allocation() -> u64 {
         MAX_BLOCK_BYTES / MIN_TZE_OUTPUT_SIZE
     }
