@@ -7,6 +7,7 @@ use zcash_primitives::transaction::fees::fixed::FeeRule;
 use zcash_proofs::prover::LocalTxProver;
 use zcash_protocol::TxId;
 use zcash_protocol::{consensus::BranchId, value::Zatoshis};
+use zcash_transparent::bundle::TxOut;
 use zcash_transparent::{builder::TransparentSigningSet, bundle::OutPoint};
 use zebra_chain::transaction::{self, zip317};
 use zebra_node_services::rpc_client::RpcRequestClient;
@@ -32,42 +33,35 @@ async fn test_tze_starks() {
     println!("[tze starks] tx_1: {}", tx_1);
 }
 
-async fn send_tx_0(
-    client: &RpcRequestClient,
+fn build_tx_0(
     wallet: &Wallet<RegtestNetwork>,
     target_height: u32,
-) -> (transaction::Hash, TzeOut) {
+    prev_txid: TxId,
+    prev_output: TxOut,
+    fee: Zatoshis,
+) -> zebra_chain::transaction::Transaction {
     let miner_key = wallet.derive_key(0, 0);
     let mut builder = stark_verify::StarkVerifyBuilder {
         txn_builder: wallet.tx_builder(target_height),
         extension_id: 1,
     };
 
-    let fee_rule = FeeRule::non_standard(Zatoshis::const_from_u64(10000));
+    let fee_rule = FeeRule::non_standard(fee);
     let prover = LocalTxProver::bundled();
-
-    let coinbase_txid = spendable_coinbase_txid(client, target_height)
-        .await
-        .unwrap();
-
-    let prev_tx = client
-        .get_transaction(&coinbase_txid, BranchId::ZFuture)
-        .await
-        .unwrap();
-
-    let coin = prev_tx.transparent_bundle().unwrap().vout[0].clone();
 
     builder
         .add_transparent_input(
             miner_key.public_key(),
-            OutPoint::new(coinbase_txid.into(), 0),
-            coin.clone(),
+            OutPoint::new(prev_txid.into(), 0),
+            prev_output.clone(),
         )
         .unwrap();
 
-    let value = (coin.value() - fee_rule.fixed_fee()).expect("value is positive");
+    let (_, initial_root, _, program_hash) = proof_data();
+
+    let value = (prev_output.value() - fee_rule.fixed_fee()).expect("value is positive");
     builder
-        .add_stark_verify_output(value)
+        .add_stark_verify_output(value, initial_root, program_hash)
         .map_err(|e| format!("open failure: {:?}", e))
         .unwrap();
 
@@ -88,9 +82,47 @@ async fn send_tx_0(
         .map_err(|e| format!("build failure: {:?}", e))
         .unwrap();
 
-    let tx = res.transaction();
+    tx_convert_librustzcash_to_zebra(res.transaction())
+}
+
+async fn send_tx_0(
+    client: &RpcRequestClient,
+    wallet: &Wallet<RegtestNetwork>,
+    target_height: u32,
+) -> (transaction::Hash, TzeOut) {
+    let coinbase_txid = spendable_coinbase_txid(client, target_height)
+        .await
+        .unwrap();
+
+    let prev_tx = client
+        .get_transaction(&coinbase_txid, BranchId::ZFuture)
+        .await
+        .unwrap();
+
+    let prev_output = prev_tx.transparent_bundle().unwrap().vout[0].clone();
+
+    let tx = build_tx_0(
+        wallet,
+        target_height,
+        coinbase_txid,
+        prev_output.clone(),
+        Zatoshis::const_from_u64(10000),
+    );
+
+    let conventional_fee = zip317::conventional_fee(&tx).try_into().unwrap();
+    println!("conventional_fee: {conventional_fee:?}");
+
+    let tx = build_tx_0(
+        wallet,
+        target_height,
+        coinbase_txid,
+        prev_output,
+        conventional_fee,
+    );
+    let tx = tx_convert_zebra_to_librustzcash(&tx);
+
     let tze_output = tx.tze_bundle().unwrap().vout[0].clone();
-    let txid = client.send_raw_transaction(tx).await.unwrap().hash();
+    let txid = client.send_raw_transaction(&tx).await.unwrap().hash();
 
     (txid, tze_output)
 }
@@ -112,19 +144,19 @@ fn build_tx_1(
     let prevout = tze::OutPoint::new(TxId::from_bytes(prev_tx_hash.0), 0);
     let value_xfr = (prev_tze_output.value - fee_rule.fixed_fee()).unwrap();
 
-    let proof_data = include_bytes!("../../tests/fixtures/proof-sepolia-2725346.bz");
+    let (proof_data, _, final_root, program_hash) = proof_data();
 
     builder
         .add_stark_verify_input(
             (prevout, prev_tze_output),
             proof_data.to_vec(),
             true,
-            stark_verify::verify::ProofFormat::BinEnc,
+            stark_verify::stark_verify::ProofFormat::BinEnc,
         )
         .unwrap();
 
     builder
-        .add_stark_verify_output(value_xfr)
+        .add_stark_verify_output(value_xfr, final_root, program_hash)
         .map_err(|e| format!("open failure: {:?}", e))
         .unwrap();
 
@@ -176,4 +208,20 @@ async fn send_tx_1(
     let txid = client.send_raw_transaction(&tx).await.unwrap().hash();
 
     (txid, tze_output)
+}
+
+fn proof_data() -> (Vec<u8>, [u8; 32], [u8; 32], [u8; 32]) {
+    let initial_root: [u8; 32] =
+        hex::decode("07bea7a967f1c40fedf5dd92e8415facc2175e3e72a80f609901c33d2b2c1973")
+            .unwrap()
+            .try_into()
+            .unwrap();
+    let final_root: [u8; 32] =
+        hex::decode("051306f206bd001c17189d0ca0894c2f9aaaacc701e5122390f463655dccd613")
+            .unwrap()
+            .try_into()
+            .unwrap();
+    let program_hash: [u8; 32] = [0; 32];
+    let proof_data = include_bytes!("../../tests/fixtures/proof-sepolia-2725346.bz");
+    (proof_data.to_vec(), initial_root, final_root, program_hash)
 }

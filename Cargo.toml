@@ -32,7 +32,7 @@ zcash_primitives = "0.26"
 zcash_proofs = "0.26"
 zcash_transparent = "0.6"
 zcash_protocol = "0.7"
-zcash_extensions = { git = "https://github.com/Ztarknet/librustzcash", rev = "a2dd580b875d2f9fbee74ee9c5abe7b7c74ac953" }
+zcash_extensions = { git = "https://github.com/Ztarknet/librustzcash", rev = "c6ead76291de346822985dee58ad1cb8cdb51dcd" }
 zip32 = "0.2"
 abscissa_core = "0.7"
 atty = "0.2.14"
@@ -297,4 +297,4 @@ unexpected_cfgs = { level = "warn", check-cfg = [
 ] }
 
 [patch.crates-io]
-zcash_protocol = { git = "https://github.com/ztarknet/librustzcash", rev = "a2dd580b875d2f9fbee74ee9c5abe7b7c74ac953" }
+zcash_protocol = { git = "https://github.com/ztarknet/librustzcash", rev = "c6ead76291de346822985dee58ad1cb8cdb51dcd" }
