@@ -6,7 +6,8 @@ use zcash_primitives::{
 use zcash_protocol::consensus::BranchId;
 use zebra_node_services::rpc_client::RpcRequestClient;
 use zebra_rpc::methods::{
-    GetBlockHashResponse, GetBlockResponse, GetRawTransactionResponse, SendRawTransactionResponse,
+    GetAddressUtxosRequest, GetAddressUtxosResponse, GetBlockHashResponse, GetBlockResponse,
+    GetRawTransactionResponse, SendRawTransactionResponse, Utxo,
 };
 
 #[async_trait]
@@ -38,6 +39,7 @@ pub trait RpcClient {
     async fn get_block_count(&self) -> Result<u32, anyhow::Error>;
     async fn get_block_hash(&self, height: u32) -> Result<GetBlockHashResponse, anyhow::Error>;
     async fn get_block(&self, hash: &BlockHash) -> Result<GetBlockResponse, anyhow::Error>;
+    async fn get_address_utxos(&self, address: String) -> Result<Vec<Utxo>, anyhow::Error>;
 }
 
 #[async_trait]
@@ -51,7 +53,7 @@ impl RpcClient for RpcRequestClient {
         let tx_data_hex = hex::encode(tx_data);
         self.json_result_from_call("sendrawtransaction", format!(r#"["{tx_data_hex}"]"#))
             .await
-            .map_err(|e| anyhow::anyhow!("failed to send transaction: {}", e))
+            .map_err(|e| anyhow::anyhow!("failed to send transaction: {:?}", e))
     }
 
     async fn get_raw_transaction(
@@ -81,5 +83,23 @@ impl RpcClient for RpcRequestClient {
         self.json_result_from_call("getblock", format!(r#"["{block_hash_hex}", 0]"#))
             .await
             .map_err(|e| anyhow::anyhow!("failed to get block: {}", e))
+    }
+
+    async fn get_address_utxos(&self, address: String) -> Result<Vec<Utxo>, anyhow::Error> {
+        let request = GetAddressUtxosRequest::new(vec![address], false);
+        let request_json = serde_json::to_string(&request)
+            .map_err(|e| anyhow::anyhow!("failed to serialize request: {}", e))?;
+        let params = format!("[{}]", request_json);
+        let response: GetAddressUtxosResponse = self
+            .json_result_from_call("getaddressutxos", params)
+            .await
+            .map_err(|e| anyhow::anyhow!("failed to get address utxos: {}", e))?;
+
+        let utxos = match response {
+            GetAddressUtxosResponse::Utxos(utxos) => utxos,
+            GetAddressUtxosResponse::UtxosAndChainInfo(response) => response.utxos().clone(),
+        };
+
+        Ok(utxos)
     }
 }

@@ -21,7 +21,7 @@ use crate::{
 /// in the Zcash specification. (But since blocks also contain a
 /// block header and transaction count, the maximum size of a
 /// transaction in the chain is approximately 1.5 kB smaller.)
-pub const MAX_BLOCK_BYTES: u64 = 2_000_000;
+pub const MAX_BLOCK_BYTES: u64 = 2_500_000;
 
 /// Checks if a block header version is valid.
 ///

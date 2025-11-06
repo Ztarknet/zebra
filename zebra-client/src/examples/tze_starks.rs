@@ -19,7 +19,7 @@ use crate::wallet::Wallet;
 
 #[tokio::test]
 async fn test_tze_starks() {
-    let client = RpcRequestClient::with_base_url("https://rpc.regtest.ztarknet.cash");
+    let client = RpcRequestClient::new("127.0.0.1:18232".parse().unwrap());
     let block_count = client.get_block_count().await.unwrap();
     let target_height = block_count + 1;
     let wallet = regtest_default_wallet();
@@ -57,11 +57,11 @@ fn build_tx_0(
         )
         .unwrap();
 
-    let (_, initial_root, _, program_hash) = proof_data();
+    let (_, initial_root, _, program_hash, bootloader_program_hash) = proof_data();
 
     let value = (prev_output.value() - fee_rule.fixed_fee()).expect("value is positive");
     builder
-        .add_stark_verify_output(value, initial_root, program_hash)
+        .add_stark_verify_output(value, initial_root, program_hash, bootloader_program_hash)
         .map_err(|e| format!("open failure: {:?}", e))
         .unwrap();
 
@@ -144,7 +144,7 @@ fn build_tx_1(
     let prevout = tze::OutPoint::new(TxId::from_bytes(prev_tx_hash.0), 0);
     let value_xfr = (prev_tze_output.value - fee_rule.fixed_fee()).unwrap();
 
-    let (proof_data, _, final_root, program_hash) = proof_data();
+    let (proof_data, _, final_root, program_hash, bootloader_program_hash) = proof_data();
 
     builder
         .add_stark_verify_input(
@@ -156,7 +156,7 @@ fn build_tx_1(
         .unwrap();
 
     builder
-        .add_stark_verify_output(value_xfr, final_root, program_hash)
+        .add_stark_verify_output(value_xfr, final_root, program_hash, bootloader_program_hash)
         .map_err(|e| format!("open failure: {:?}", e))
         .unwrap();
 
@@ -210,7 +210,7 @@ async fn send_tx_1(
     (txid, tze_output)
 }
 
-fn proof_data() -> (Vec<u8>, [u8; 32], [u8; 32], [u8; 32]) {
+fn proof_data() -> (Vec<u8>, [u8; 32], [u8; 32], [u8; 32], [u8; 32]) {
     let initial_root: [u8; 32] =
         hex::decode("07bea7a967f1c40fedf5dd92e8415facc2175e3e72a80f609901c33d2b2c1973")
             .unwrap()
@@ -221,7 +221,25 @@ fn proof_data() -> (Vec<u8>, [u8; 32], [u8; 32], [u8; 32]) {
             .unwrap()
             .try_into()
             .unwrap();
-    let program_hash: [u8; 32] = [0; 32];
+
+    let program_hash: [u8; 32] =
+        hex::decode("02416c3ecaac028d02a400fd127d7467c6d2f83a082b7f1b98bedbcc14d2c7e4")
+            .unwrap()
+            .try_into()
+            .unwrap();
+
+    let bootloader_hash: [u8; 32] =
+        hex::decode("0060ec1c80d746256f8c8d5dc53d83a3802523785a854f8d51be0b68e25735c8")
+            .unwrap()
+            .try_into()
+            .unwrap();
+
     let proof_data = include_bytes!("../../tests/fixtures/proof-sepolia-2725346.bz");
-    (proof_data.to_vec(), initial_root, final_root, program_hash)
+    (
+        proof_data.to_vec(),
+        initial_root,
+        final_root,
+        program_hash,
+        bootloader_hash,
+    )
 }
