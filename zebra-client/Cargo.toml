@@ -29,3 +29,4 @@ tokio = { workspace = true, features = ["full", "test-util"] }
 async-trait = "0.1"
 rand_core = "0.6"
 serde_json = { workspace = true }
+log = { workspace = true }

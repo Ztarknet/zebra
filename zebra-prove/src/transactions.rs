@@ -18,7 +18,8 @@ use zebra_client::helpers::tx_convert_librustzcash_to_zebra;
 use zebra_client::wallet::Wallet;
 use zebra_node_services::rpc_client::RpcRequestClient;
 
-/// Find spendable fee outpoint for a wallet address using get_address_utxos
+/// Find spendable fee outpoint for a wallet address using
+/// get_address_utxos_with_mempool
 pub async fn get_fee_outpoint(
     rpc_client: &RpcRequestClient,
     wallet_address: String,
@@ -26,7 +27,7 @@ pub async fn get_fee_outpoint(
     info!("Finding spendable fee outpoint...");
 
     let utxos = rpc_client
-        .get_address_utxos(wallet_address)
+        .get_address_utxos_with_mempool(wallet_address)
         .await
         .context("Failed to get address UTXOs")?;
 
