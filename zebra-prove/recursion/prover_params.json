@@ -1,11 +1,11 @@
 {
-    "channel_hash": "poseidon252",
+    "channel_hash": "blake2s",
     "pcs_config": {
-        "pow_bits": 32,
+        "pow_bits": 26,
         "fri_config": {
             "log_last_layer_degree_bound": 0,
             "log_blowup_factor": 2,
-            "n_queries": 32
+            "n_queries": 35
         }
     },
     "preprocessed_trace": "canonical_without_pedersen"
