@@ -145,7 +145,8 @@ pub async fn build_initialize_tx<P: Parameters>(
     // Convert FieldElement to [u8; 32] for root and program_hash
     let root_bytes = field_element_to_bytes(root);
     let os_program_hash_bytes = field_element_to_bytes(os_program_hash);
-    let bootloader_program_hash_bytes = field_element_to_bytes(bootloader_program_hash);
+    let bootloader_program_hash_bytes =
+        field_element_to_bytes(bootloader_program_hash);
 
     // Add TZE output with the proof
     builder
@@ -219,9 +220,12 @@ pub async fn build_state_update_tx<P: Parameters>(
     let fee_rule = FeeRule::non_standard(fee);
     let prover = LocalTxProver::bundled();
 
-
     // TODO: Seems like ugly hack, but it works.
-    warn!("Overriding TZE output index from {} to {}", tze_prevout.0.n(), 1);
+    warn!(
+        "Overriding TZE output index from {} to {}",
+        tze_prevout.0.n(),
+        1
+    );
     let tze_prevout = (
         tze::OutPoint::new(tze_prevout.0.txid().clone(), 1),
         tze_prevout.1,
@@ -248,8 +252,8 @@ pub async fn build_state_update_tx<P: Parameters>(
     // Convert FieldElement to [u8; 32] for root and program_hash
     let final_root_bytes = field_element_to_bytes(final_root);
     let os_program_hash_bytes = field_element_to_bytes(os_program_hash);
-    let bootloader_program_hash_bytes = field_element_to_bytes(bootloader_program_hash);
-
+    let bootloader_program_hash_bytes =
+        field_element_to_bytes(bootloader_program_hash);
 
     // Add TZE output with the proof
     builder

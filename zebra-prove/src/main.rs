@@ -285,13 +285,20 @@ async fn main() -> anyhow::Result<()> {
 
             // move proof_result to current directory
             let current_dir = std::env::current_dir()?;
-            let proof_result_path = current_dir.join(proof_result.file_name().unwrap());
+            let proof_result_path =
+                current_dir.join(proof_result.file_name().unwrap());
             std::fs::rename(&proof_result, &proof_result_path)?;
-            info!("Proof moved to current directory: {}", proof_result_path.display());
+            info!(
+                "Proof moved to current directory: {}",
+                proof_result_path.display()
+            );
 
             // Clean up intermediate files if requested
             if !keep_intermediate {
-                info!("Cleaning up intermediate files...: {}", output_dir.display());
+                info!(
+                    "Cleaning up intermediate files...: {}",
+                    output_dir.display()
+                );
                 std::fs::remove_dir_all(&output_dir)?;
             }
 
@@ -319,15 +326,21 @@ async fn main() -> anyhow::Result<()> {
             let key = wallet.derive_key(0, 0);
             info!("Wallet address: {}", key.address().encode());
 
-            // Parse bootloader program hash, program hash and root from hex strings
-            let bootloader_program_hash_fe = FieldElement::from_hex_be(&bootloader_program_hash)
-                .context("Failed to parse bootloader_program_hash hex")?;
-            let os_program_hash_fe = FieldElement::from_hex_be(&os_program_hash)
-                .context("Failed to parse program_hash hex")?;
+            // Parse bootloader program hash, program hash and root from hex
+            // strings
+            let bootloader_program_hash_fe =
+                FieldElement::from_hex_be(&bootloader_program_hash)
+                    .context("Failed to parse bootloader_program_hash hex")?;
+            let os_program_hash_fe =
+                FieldElement::from_hex_be(&os_program_hash)
+                    .context("Failed to parse program_hash hex")?;
             let root_fe = FieldElement::from_hex_be(&root)
                 .context("Failed to parse root hex")?;
 
-            info!("Bootloader Program Hash: 0x{:x}", bootloader_program_hash_fe);
+            info!(
+                "Bootloader Program Hash: 0x{:x}",
+                bootloader_program_hash_fe
+            );
             info!("Program Hash:            0x{:x}", os_program_hash_fe);
             info!("Initial Root:            0x{:x}", root_fe);
 
@@ -385,7 +398,10 @@ async fn main() -> anyhow::Result<()> {
                     .send_raw_transaction(&tx_librustzcash)
                     .await
                     .context("Failed to send transaction")?;
-                info!("✓ Transaction sent successfully: {}", send_result.hash());
+                info!(
+                    "✓ Transaction sent successfully: {}",
+                    send_result.hash()
+                );
             }
 
             info!("Command completed successfully!");
@@ -483,7 +499,10 @@ async fn main() -> anyhow::Result<()> {
                     .await
                     .context("Failed to send transaction")?;
 
-                    info!("✓ Transaction sent successfully: {}", send_result.hash());
+                info!(
+                    "✓ Transaction sent successfully: {}",
+                    send_result.hash()
+                );
             }
 
             info!("Command completed successfully!");
