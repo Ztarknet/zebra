@@ -10,6 +10,7 @@ name = "zebra-prove"
 path = "src/main.rs"
 
 [features]
+default = ["tx_v6"]
 tx_v6 = ["zebra-chain/tx_v6", "zebra-rpc/tx_v6"]
 
 [dependencies]
