@@ -29,5 +29,5 @@ prove:
 		--program_input program_input.json \
 		--prover_params_json prover_params.json \
 		--proofs_dir target \
-		--proof-format json \
+		--proof-format cairo-serde \
 		--verify
