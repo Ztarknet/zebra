@@ -298,4 +298,4 @@ unexpected_cfgs = { level = "warn", check-cfg = [
 ] }
 
 [patch.crates-io]
-zcash_protocol = { git = "https://github.com/ztarknet/librustzcash", rev = "c6ead76291de346822985dee58ad1cb8cdb51dcd" }
+zcash_protocol = { git = "https://github.com/ztarknet/librustzcash", rev = "ad6e9206505ea2892a35217bd5dfc84f13129b07" }

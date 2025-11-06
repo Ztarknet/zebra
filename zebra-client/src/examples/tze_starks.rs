@@ -210,7 +210,7 @@ async fn send_tx_1(
     (txid, tze_output)
 }
 
-fn proof_data() -> (Vec<u8>, [u8; 32], [u8; 32], [u8; 32]) {
+fn proof_data() -> (Vec<u8>, [u8; 32], [u8; 32], [u8; 32], [u8; 32]) {
     let initial_root: [u8; 32] =
         hex::decode("07bea7a967f1c40fedf5dd92e8415facc2175e3e72a80f609901c33d2b2c1973")
             .unwrap()
@@ -222,16 +222,24 @@ fn proof_data() -> (Vec<u8>, [u8; 32], [u8; 32], [u8; 32]) {
             .try_into()
             .unwrap();
 
-    let program_hash: [u8; 32] =         hex::decode("2416c3ecaac028d02a400fd127d7467c6d2f83a082b7f1b98bedbcc14d2c7e4")
-        .unwrap()
-        .try_into()
-        .unwrap();
+    let program_hash: [u8; 32] =
+        hex::decode("02416c3ecaac028d02a400fd127d7467c6d2f83a082b7f1b98bedbcc14d2c7e4")
+            .unwrap()
+            .try_into()
+            .unwrap();
 
-    let bootloader_hash: [u8; 32] =         hex::decode("60ec1c80d746256f8c8d5dc53d83a3802523785a854f8d51be0b68e25735c8")
-        .unwrap()
-        .try_into()
-        .unwrap();
+    let bootloader_hash: [u8; 32] =
+        hex::decode("0060ec1c80d746256f8c8d5dc53d83a3802523785a854f8d51be0b68e25735c8")
+            .unwrap()
+            .try_into()
+            .unwrap();
 
     let proof_data = include_bytes!("../../tests/fixtures/proof-sepolia-2725346.bz");
-    (proof_data.to_vec(), initial_root, final_root, program_hash, bootloader_hash)
+    (
+        proof_data.to_vec(),
+        initial_root,
+        final_root,
+        program_hash,
+        bootloader_hash,
+    )
 }
