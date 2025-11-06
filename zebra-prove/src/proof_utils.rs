@@ -185,6 +185,18 @@ pub fn load_proof_from_compressed_bincode(
     Ok(proof)
 }
 
+/// Load proof from Cairo Serde JSON file
+
+pub fn load_proof_from_cairo_serde(
+    proof_file: &Path,
+) -> Result<CairoProof<Blake2sMerkleHasher>> {
+    let proof_str = std::fs::read_to_string(proof_file)?;
+    let felts: Vec<starknet_ff::FieldElement> =
+        sonic_rs::from_str(&proof_str).map_err(std::io::Error::other)?;
+    let proof = CairoDeserialize::deserialize(&mut felts.iter());
+    Ok(proof)
+}
+
 /// Load and print proof output from a file
 ///
 /// # Arguments

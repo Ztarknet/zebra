@@ -159,6 +159,15 @@ enum Commands {
         #[arg(short, long)]
         output_path: PathBuf,
     },
+    CairoSerdeToBinary {
+        /// Path to the proof file (.json format)
+        #[arg(short, long)]
+        proof_file: PathBuf,
+
+        /// Output path
+        #[arg(short, long)]
+        output_path: PathBuf,
+    },
     /// Initialize the state on Zebra node
     Initialize {
         /// Path to wallet file (JSON with mnemonic)
@@ -541,6 +550,15 @@ async fn main() -> anyhow::Result<()> {
         } => {
             info!("=== Convert Proof to Binary ===");
             let proof = proof_utils::load_proof_from_file(&proof_file)?;
+            proof_utils::serialize_proof_to_file(&proof, &output_path)?;
+            info!("Proof converted successfully");
+        }
+        Commands::CairoSerdeToBinary {
+            proof_file,
+            output_path,
+        } => {
+            info!("=== Convert Proof to Binary ===");
+            let proof = proof_utils::load_proof_from_cairo_serde(&proof_file)?;
             proof_utils::serialize_proof_to_file(&proof, &output_path)?;
             info!("Proof converted successfully");
         }

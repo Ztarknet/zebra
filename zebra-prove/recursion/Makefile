@@ -1,33 +1,37 @@
-install-stwo-cairo-dev-utils:
-	cargo +nightly-2025-07-14 install \
-		--git https://github.com/starkware-libs/stwo-cairo.git \
-		--rev f57087fe5ce57e6ffe5b9c42e08038f60b3b12f4 \
-		dev-utils
+STWO_CAIRO_REV=f57087fe5ce57e6ffe5b9c42e08038f60b3b12f4
+PROVING_UTILS_REV=1cc94dcaa6922c197430a0bfad27cc80c22056e0
 
 install-stwo-run-and-prove:
 	cargo +nightly-2025-07-14 install \
-		--git ssh://git@github.com/starkware-libs/bootloader-hints.git \
-		--rev 1cc94dcaa6922c197430a0bfad27cc80c22056e0 \
-		stwo_run_and_prove
+		--git ssh://git@github.com/starkware-libs/proving-utils.git \
+		--rev $(PROVING_UTILS_REV) \
+		stwo_run_and_prove --force
 
 build:
 	scarb --profile release build
 
 execute:
-	scarb execute --arguments-file tests/fixtures/proof.json
+	scarb execute --arguments-file tests/fixtures/ztarknet_proof.serde.json
 
-proof-bin-to-cairo:
-	convert_proof_format \
-		--input target/proof.bz \
-		--input_format binary \
-		--output tests/fixtures/proof.json \
-		--output_format cairo-serde
+ztarknet-proof-bin-to-cairo:
+	cargo run --release --bin zebra-prove -- binary-to-cairo-serde \
+		--proof-file tests/fixtures/ztarknet_proof.bz \
+		--output-path tests/fixtures/ztarknet_proof.serde.json
 
-prove:
+prove-step-1:
 	stwo_run_and_prove \
 		--program ../bootloaders/simple_bootloader_compiled.json \
-		--program_input program_input.json \
-		--prover_params_json prover_params.json \
+		--program_input program_input_step_1.json \
+		--prover_params_json prover_params_step_1.json \
 		--proofs_dir target \
-		--proof-format json \
+		--proof-format cairo-serde \
+		--verify
+
+prove-step-2:
+	stwo_run_and_prove \
+		--program ../bootloaders/simple_bootloader_compiled.json \
+		--program_input program_input_step_2.json \
+		--prover_params_json prover_params_step_2.json \
+		--proofs_dir target \
+		--proof-format cairo-serde \
 		--verify

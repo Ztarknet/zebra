@@ -2,8 +2,8 @@
     "single_page": true,
     "tasks": [{
         "type": "Cairo1Executable",
-        "path": "tests/fixtures/stwo_wrapper.executable.json",
+        "path": "compiled/stwo_wrapper.executable.json",
         "program_hash_function": "blake",
-        "user_args_file": "tests/fixtures/proof.json"
+        "user_args_file": "tests/fixtures/ztarknet_proof.serde.json"
     }]
 }
