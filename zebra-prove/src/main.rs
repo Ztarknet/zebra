@@ -141,8 +141,17 @@ enum Commands {
         #[arg(short, long)]
         proof_file: PathBuf,
     },
-    ConvertProof {
-        /// Path to the proof file (either .json or .bz format)
+    BinaryToCairoSerde {
+        /// Path to the proof file (.bz format)
+        #[arg(short, long)]
+        proof_file: PathBuf,
+
+        /// Output path
+        #[arg(short, long)]
+        output_path: PathBuf,
+    },
+    JsonToBinary {
+        /// Path to the proof file (.json format)
         #[arg(short, long)]
         proof_file: PathBuf,
 
@@ -517,13 +526,22 @@ async fn main() -> anyhow::Result<()> {
 
             info!("Command completed successfully!");
         },
-        Commands::ConvertProof {
+        Commands::BinaryToCairoSerde {
             proof_file,
             output_path,
         } => {
             info!("=== Convert Proof ===");
             let proof = load_proof_from_compressed_bincode(&proof_file)?;
             cairo_air::utils::serialize_proof_to_file::<Blake2sMerkleChannel>(&proof, output_path, cairo_air::utils::ProofFormat::CairoSerde)?;
+            info!("Proof converted successfully");
+        },
+        Commands::JsonToBinary {
+            proof_file,
+            output_path,
+        } => {
+            info!("=== Convert Proof to Binary ===");
+            let proof = proof_utils::load_proof_from_file(&proof_file)?;
+            proof_utils::serialize_proof_to_file(&proof, &output_path)?;
             info!("Proof converted successfully");
         }
     }
