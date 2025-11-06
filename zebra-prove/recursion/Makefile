@@ -25,9 +25,9 @@ proof-bin-to-cairo:
 
 prove:
 	stwo_run_and_prove \
-		--program-input program_input.json \
-		--prover-params prover_params.json \
-		--output-dir target \
-		--network regtest \
-		--block-range 0-1000000 \
-		--verbose
+		--program ../bootloaders/simple_bootloader_compiled.json \
+		--program_input program_input.json \
+		--prover_params_json prover_params.json \
+		--proofs_dir target \
+		--proof-format json \
+		--verify
