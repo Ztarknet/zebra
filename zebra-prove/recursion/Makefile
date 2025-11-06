@@ -6,8 +6,8 @@ install-stwo-cairo-dev-utils:
 
 install-stwo-run-and-prove:
 	cargo +nightly-2025-07-14 install \
-		--git https://github.com/starkware-libs/bootloader-hints.git \
-		--branch main \
+		--git ssh://git@github.com/starkware-libs/bootloader-hints.git \
+		--rev 1cc94dcaa6922c197430a0bfad27cc80c22056e0 \
 		stwo_run_and_prove
 
 build:
