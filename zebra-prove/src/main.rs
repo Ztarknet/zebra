@@ -283,10 +283,16 @@ async fn main() -> anyhow::Result<()> {
             info!("=== Step 3: Print proof output ===");
             load_and_print_proof(&proof_result)?;
 
+            // move proof_result to current directory
+            let current_dir = std::env::current_dir()?;
+            let proof_result_path = current_dir.join(proof_result.file_name().unwrap());
+            std::fs::rename(&proof_result, &proof_result_path)?;
+            info!("Proof moved to current directory: {}", proof_result_path.display());
+
             // Clean up intermediate files if requested
             if !keep_intermediate {
-                info!("Cleaning up intermediate files...");
-                // Add cleanup logic here if needed
+                info!("Cleaning up intermediate files...: {}", output_dir.display());
+                std::fs::remove_dir_all(&output_dir)?;
             }
 
             info!("Pipeline completed successfully!");

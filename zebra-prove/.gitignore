@@ -31,3 +31,5 @@ target
 
 # For snos compilation
 /sequencer_venv
+
+proof*.bz
