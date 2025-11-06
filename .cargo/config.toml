@@ -1,4 +1,3 @@
 # Enable zcash_unstable features for TZE support
 [build]
 rustflags = ["--cfg", "zcash_unstable=\"zfuture\""]
-
