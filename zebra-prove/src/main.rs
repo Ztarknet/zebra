@@ -4,6 +4,7 @@ use hex::FromHex;
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use starknet_ff::FieldElement;
+use stwo::core::vcs::blake2_merkle::Blake2sMerkleChannel;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use zcash_primitives::transaction::TxId;
@@ -139,6 +140,24 @@ enum Commands {
         /// Path to the proof file (either .json or .bz format)
         #[arg(short, long)]
         proof_file: PathBuf,
+    },
+    BinaryToCairoSerde {
+        /// Path to the proof file (.bz format)
+        #[arg(short, long)]
+        proof_file: PathBuf,
+
+        /// Output path
+        #[arg(short, long)]
+        output_path: PathBuf,
+    },
+    JsonToBinary {
+        /// Path to the proof file (.json format)
+        #[arg(short, long)]
+        proof_file: PathBuf,
+
+        /// Output path
+        #[arg(short, long)]
+        output_path: PathBuf,
     },
     /// Initialize the state on Zebra node
     Initialize {
@@ -506,6 +525,24 @@ async fn main() -> anyhow::Result<()> {
             }
 
             info!("Command completed successfully!");
+        },
+        Commands::BinaryToCairoSerde {
+            proof_file,
+            output_path,
+        } => {
+            info!("=== Convert Proof ===");
+            let proof = load_proof_from_compressed_bincode(&proof_file)?;
+            cairo_air::utils::serialize_proof_to_file::<Blake2sMerkleChannel>(&proof, output_path, cairo_air::utils::ProofFormat::CairoSerde)?;
+            info!("Proof converted successfully");
+        },
+        Commands::JsonToBinary {
+            proof_file,
+            output_path,
+        } => {
+            info!("=== Convert Proof to Binary ===");
+            let proof = proof_utils::load_proof_from_file(&proof_file)?;
+            proof_utils::serialize_proof_to_file(&proof, &output_path)?;
+            info!("Proof converted successfully");
         }
     }
 
