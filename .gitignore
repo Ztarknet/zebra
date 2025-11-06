@@ -164,3 +164,6 @@ __pycache__/
 
 # RPC tests cache 
 zebra-rpc/qa/cache/
+
+# zebrad cache
+.cache

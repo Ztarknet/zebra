@@ -519,7 +519,7 @@ fn test_vec143_2() -> Result<()> {
     let input_ind = 1;
     let output = transparent::Output {
         value,
-        lock_script: lock_script.clone(),
+        lock_script: lock_script.clone().into(),
     };
     let all_previous_outputs = mock_pre_v5_output_list(output, input_ind);
 
@@ -592,7 +592,7 @@ fn test_vec243_2() -> Result<()> {
     let input_ind = 1;
     let output = transparent::Output {
         value,
-        lock_script: lock_script.clone(),
+        lock_script: lock_script.clone().into(),
     };
     let all_previous_outputs = mock_pre_v5_output_list(output, input_ind);
 
@@ -621,7 +621,7 @@ fn test_vec243_2() -> Result<()> {
     let lock_script = Script::new(&[]);
     let prevout = transparent::Output {
         value,
-        lock_script: lock_script.clone(),
+        lock_script: lock_script.clone().into(),
     };
     let index = input_ind;
     let all_previous_outputs = mock_pre_v5_output_list(prevout, input_ind);
@@ -656,7 +656,7 @@ fn test_vec243_3() -> Result<()> {
     let input_ind = 0;
     let all_previous_outputs = vec![transparent::Output {
         value,
-        lock_script: lock_script.clone(),
+        lock_script: lock_script.clone().into(),
     }];
 
     let hasher = SigHasher::new(
@@ -686,7 +686,7 @@ fn test_vec243_3() -> Result<()> {
     )?);
     let prevout = transparent::Output {
         value,
-        lock_script: lock_script.clone(),
+        lock_script: lock_script.clone().into(),
     };
     let index = input_ind;
 
@@ -719,7 +719,7 @@ fn zip143_sighash() -> Result<()> {
                 Some(transparent_input as usize),
                 Some(transparent::Output {
                     value: test.amount.try_into()?,
-                    lock_script: transparent::Script::new(test.script_code.as_ref()),
+                    lock_script: transparent::Script::new(test.script_code.as_ref()).into(),
                 }),
             ),
             None => (None, None),
@@ -737,7 +737,13 @@ fn zip143_sighash() -> Result<()> {
                     input_index.map(|input_index| {
                         (
                             input_index,
-                            output.unwrap().lock_script.as_raw_bytes().to_vec(),
+                            output
+                                .unwrap()
+                                .lock_script
+                                .try_as_script()
+                                .expect("must be a script")
+                                .as_raw_bytes()
+                                .to_vec(),
                         )
                     }),
                 )
@@ -761,7 +767,7 @@ fn zip243_sighash() -> Result<()> {
                 Some(transparent_input as usize),
                 Some(transparent::Output {
                     value: test.amount.try_into()?,
-                    lock_script: transparent::Script::new(test.script_code.as_ref()),
+                    lock_script: transparent::Script::new(test.script_code.as_ref()).into(),
                 }),
             ),
             None => (None, None),
@@ -779,7 +785,13 @@ fn zip243_sighash() -> Result<()> {
                     input_index.map(|input_index| {
                         (
                             input_index,
-                            output.unwrap().lock_script.as_raw_bytes().to_vec(),
+                            output
+                                .unwrap()
+                                .lock_script
+                                .try_as_script()
+                                .expect("must be a script")
+                                .as_raw_bytes()
+                                .to_vec(),
                         )
                     }),
                 )
@@ -805,7 +817,7 @@ fn zip244_sighash() -> Result<()> {
                 .zip(test.script_pubkeys.iter())
                 .map(|(amount, script_pubkey)| transparent::Output {
                     value: (*amount).try_into().unwrap(),
-                    lock_script: transparent::Script::new(script_pubkey.as_ref()),
+                    lock_script: transparent::Script::new(script_pubkey.as_ref()).into(),
                 })
                 .collect(),
         );

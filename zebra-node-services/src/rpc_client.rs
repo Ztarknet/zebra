@@ -12,7 +12,7 @@ use crate::BoxError;
 #[derive(Clone, Debug)]
 pub struct RpcRequestClient {
     client: Client,
-    rpc_address: SocketAddr,
+    base_url: String,
 }
 
 impl RpcRequestClient {
@@ -20,7 +20,15 @@ impl RpcRequestClient {
     pub fn new(rpc_address: SocketAddr) -> Self {
         Self {
             client: Client::new(),
-            rpc_address,
+            base_url: format!("http://{}", rpc_address),
+        }
+    }
+
+    /// Creates new RPCRequestSender with a custom base URL.
+    pub fn with_base_url(base_url: &str) -> Self {
+        Self {
+            client: Client::new(),
+            base_url: base_url.into(),
         }
     }
 
@@ -34,7 +42,7 @@ impl RpcRequestClient {
         let params = params.as_ref();
 
         self.client
-            .post(format!("http://{}", &self.rpc_address))
+            .post(&self.base_url)
             .body(format!(
                 r#"{{"jsonrpc": "2.0", "method": "{method}", "params": {params}, "id":123 }}"#
             ))
@@ -54,7 +62,7 @@ impl RpcRequestClient {
         let params = params.as_ref();
 
         self.client
-            .post(format!("http://{}", &self.rpc_address))
+            .post(&self.base_url)
             .body(format!(
                 r#"{{"jsonrpc": "2.0", "method": "{method}", "params": {params}, "id":123 }}"#
             ))
@@ -73,7 +81,7 @@ impl RpcRequestClient {
         let params = params.as_ref();
 
         self.client
-            .post(format!("http://{}", &self.rpc_address))
+            .post(&self.base_url)
             .body(format!(
                 r#"{{"jsonrpc": "2.0", "method": "{method}", "params": {params}, "id":123 }}"#
             ))

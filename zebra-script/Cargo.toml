@@ -26,6 +26,8 @@ libzcash_script = { workspace = true }
 zcash_script = { workspace = true }
 zcash_primitives = { workspace = true }
 zebra-chain = { path = "../zebra-chain", version = "3.0.0" }
+zcash_extensions = { workspace = true }
+zcash_protocol = { workspace = true }
 
 thiserror = { workspace = true }
 

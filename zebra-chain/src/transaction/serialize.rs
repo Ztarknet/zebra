@@ -687,7 +687,7 @@ impl ZcashSerialize for Transaction {
                 // https://zips.z.cash/zip-0230#specification
 
                 // Denoted as `nVersionGroupId` in the spec.
-                writer.write_u32::<LittleEndian>(TX_V5_VERSION_GROUP_ID)?;
+                writer.write_u32::<LittleEndian>(TX_V6_VERSION_GROUP_ID)?;
 
                 // Denoted as `nConsensusBranchId` in the spec.
                 writer.write_u32::<LittleEndian>(u32::from(
@@ -702,11 +702,16 @@ impl ZcashSerialize for Transaction {
                 // Denoted as `nExpiryHeight` in the spec.
                 writer.write_u32::<LittleEndian>(expiry_height.0)?;
 
+                let (tze_inputs, t_inputs): (Vec<transparent::Input>, Vec<transparent::Input>) =
+                    inputs.iter().cloned().partition(|input| input.is_tze());
+                let (tze_outputs, t_outputs): (Vec<transparent::Output>, Vec<transparent::Output>) =
+                    outputs.iter().cloned().partition(|output| output.is_tze());
+
                 // Denoted as `tx_in_count` and `tx_in` in the spec.
-                inputs.zcash_serialize(&mut writer)?;
+                t_inputs.zcash_serialize(&mut writer)?;
 
                 // Denoted as `tx_out_count` and `tx_out` in the spec.
-                outputs.zcash_serialize(&mut writer)?;
+                t_outputs.zcash_serialize(&mut writer)?;
 
                 // A bundle of fields denoted in the spec as `nSpendsSapling`, `vSpendsSapling`,
                 // `nOutputsSapling`,`vOutputsSapling`, `valueBalanceSapling`, `anchorSapling`,
@@ -719,7 +724,9 @@ impl ZcashSerialize for Transaction {
                 // `proofsOrchard`, `vSpendAuthSigsOrchard`, and `bindingSigOrchard`.
                 orchard_shielded_data.zcash_serialize(&mut writer)?;
 
-                // TODO: Add the rest of v6 transaction fields.
+                // Serialize the TZE bundle
+                transparent::zcash_serialize_tze_inputs(&tze_inputs, &mut writer)?;
+                transparent::zcash_serialize_tze_outputs(&tze_outputs, &mut writer)?;
             }
         }
         Ok(())
@@ -963,6 +970,59 @@ impl ZcashDeserialize for Transaction {
                 let orchard_shielded_data = (&mut limited_reader).zcash_deserialize_into()?;
 
                 Ok(Transaction::V5 {
+                    network_upgrade,
+                    lock_time,
+                    expiry_height,
+                    inputs,
+                    outputs,
+                    sapling_shielded_data,
+                    orchard_shielded_data,
+                })
+            }
+            #[cfg(zcash_unstable = "zfuture")]
+            (0xffff, true) => {
+                // Denoted as `nVersionGroupId` in the spec.
+                let id = limited_reader.read_u32::<LittleEndian>()?;
+                if id != TX_V6_VERSION_GROUP_ID {
+                    return Err(SerializationError::Parse("expected TX_V6_VERSION_GROUP_ID"));
+                }
+                // Denoted as `nConsensusBranchId` in the spec.
+                // Convert it to a NetworkUpgrade
+                let network_upgrade =
+                    NetworkUpgrade::try_from(limited_reader.read_u32::<LittleEndian>()?)?;
+
+                // Denoted as `lock_time` in the spec.
+                let lock_time = LockTime::zcash_deserialize(&mut limited_reader)?;
+
+                // Denoted as `nExpiryHeight` in the spec.
+                let expiry_height = block::Height(limited_reader.read_u32::<LittleEndian>()?);
+
+                // Denoted as `tx_in_count` and `tx_in` in the spec.
+                let t_inputs = Vec::zcash_deserialize(&mut limited_reader)?;
+
+                // Denoted as `tx_out_count` and `tx_out` in the spec.
+                let t_outputs = Vec::zcash_deserialize(&mut limited_reader)?;
+
+                // A bundle of fields denoted in the spec as `nSpendsSapling`, `vSpendsSapling`,
+                // `nOutputsSapling`,`vOutputsSapling`, `valueBalanceSapling`, `anchorSapling`,
+                // `vSpendProofsSapling`, `vSpendAuthSigsSapling`, `vOutputProofsSapling` and
+                // `bindingSigSapling`.
+                let sapling_shielded_data = (&mut limited_reader).zcash_deserialize_into()?;
+
+                // A bundle of fields denoted in the spec as `nActionsOrchard`, `vActionsOrchard`,
+                // `flagsOrchard`,`valueBalanceOrchard`, `anchorOrchard`, `sizeProofsOrchard`,
+                // `proofsOrchard`, `vSpendAuthSigsOrchard`, and `bindingSigOrchard`.
+                let orchard_shielded_data = (&mut limited_reader).zcash_deserialize_into()?;
+
+                // Deserialize the TZE bundle
+                let tze_inputs = transparent::zcash_deserialize_tze_inputs(&mut limited_reader)?;
+                let tze_outputs = transparent::zcash_deserialize_tze_outputs(&mut limited_reader)?;
+
+                // Combine transparent inputs and outputs
+                let inputs = [t_inputs, tze_inputs].concat();
+                let outputs = [t_outputs, tze_outputs].concat();
+
+                Ok(Transaction::V6 {
                     network_upgrade,
                     lock_time,
                     expiry_height,

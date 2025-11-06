@@ -11,6 +11,7 @@ use std::fmt;
 
 use chrono::{DateTime, Duration, Utc};
 use hex::{FromHex, ToHex};
+use zcash_protocol::consensus::BranchId;
 
 #[cfg(any(test, feature = "proptest-impl"))]
 use proptest_derive::Arbitrary;
@@ -158,6 +159,27 @@ impl BytesInDisplayOrder<false, 4> for ConsensusBranchId {
 
     fn from_bytes_in_serialized_order(bytes: [u8; 4]) -> Self {
         ConsensusBranchId(u32::from_be_bytes(bytes))
+    }
+}
+
+impl TryInto<BranchId> for NetworkUpgrade {
+    type Error = crate::Error;
+
+    fn try_into(self) -> Result<BranchId, crate::Error> {
+        match self {
+            NetworkUpgrade::Sapling => Ok(BranchId::Sapling),
+            NetworkUpgrade::Blossom => Ok(BranchId::Blossom),
+            NetworkUpgrade::Heartwood => Ok(BranchId::Heartwood),
+            NetworkUpgrade::Canopy => Ok(BranchId::Canopy),
+            NetworkUpgrade::Nu5 => Ok(BranchId::Nu5),
+            NetworkUpgrade::Nu6 => Ok(BranchId::Nu6),
+            NetworkUpgrade::Nu6_1 => Ok(BranchId::Nu6_1),
+            #[cfg(zcash_unstable = "nu7")]
+            NetworkUpgrade::Nu7 => Ok(BranchId::Nu7),
+            #[cfg(zcash_unstable = "zfuture")]
+            NetworkUpgrade::ZFuture => Ok(BranchId::ZFuture),
+            _ => Err(crate::Error::InvalidConsensusBranchId),
+        }
     }
 }
 

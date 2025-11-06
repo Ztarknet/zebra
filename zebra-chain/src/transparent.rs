@@ -20,7 +20,11 @@ use crate::{
 
 pub use address::Address;
 pub use script::Script;
-pub use serialize::{GENESIS_COINBASE_DATA, MAX_COINBASE_DATA_LEN, MAX_COINBASE_HEIGHT_DATA_LEN};
+pub use serialize::{
+    zcash_deserialize_tze_inputs, zcash_deserialize_tze_outputs, zcash_serialize_tze_inputs,
+    zcash_serialize_tze_outputs, GENESIS_COINBASE_DATA, MAX_COINBASE_DATA_LEN,
+    MAX_COINBASE_HEIGHT_DATA_LEN,
+};
 pub use utxo::{
     new_ordered_outputs, new_outputs, outputs_from_utxos, utxos_from_ordered_utxos,
     CoinbaseSpendRestriction, OrderedUtxo, Utxo,
@@ -152,6 +156,86 @@ impl OutPoint {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[cfg_attr(any(test, feature = "proptest-impl"), derive(Arbitrary, Deserialize))]
+#[cfg_attr(
+    any(test, feature = "proptest-impl", feature = "elasticsearch"),
+    derive(Serialize)
+)]
+pub enum ExtendedScript {
+    Bytecode(Script),
+    Extension(TzeData),
+}
+
+impl ExtendedScript {
+    /// Returns the script program if this is a script program.
+    pub fn try_as_script(&self) -> Option<&Script> {
+        match self {
+            ExtendedScript::Bytecode(script) => Some(script),
+            ExtendedScript::Extension(_) => None,
+        }
+    }
+
+    /// Returns the TZE data if this is a TZE program.
+    pub fn try_as_extension(&self) -> Option<&TzeData> {
+        match self {
+            ExtendedScript::Extension(tze_data) => Some(tze_data),
+            ExtendedScript::Bytecode(_) => None,
+        }
+    }
+
+    /// Returns true if this is a TZE program.
+    pub fn is_extension(&self) -> bool {
+        matches!(self, ExtendedScript::Extension(_))
+    }
+
+    /// Force converts into a Bitcoin script.
+    /// TZE would be serialized as a script starting with 0xff opcode.
+    pub fn to_script(&self) -> Script {
+        match self {
+            ExtendedScript::Bytecode(script) => script.clone(),
+            ExtendedScript::Extension(data) => {
+                // serialize as a script starting with invalid opcode
+                let mut script = vec![0xff];
+                script.extend(data.extension_id.to_be_bytes());
+                script.extend(data.mode.to_be_bytes());
+                script.extend(&data.payload);
+                Script::new(&script)
+            }
+        }
+    }
+
+    /// Create an ExtendedScript from a Script.
+    /// An invalid script starting with 0xff opcode is treated as a TZE.
+    pub fn from_script(script: Script) -> Self {
+        let script_bytes = script.as_raw_bytes();
+        if script_bytes.first() == Some(&0xff) && script_bytes.len() >= 9 {
+            let extension_id = u32::from_be_bytes(script_bytes[1..5].try_into().unwrap());
+            let mode = u32::from_be_bytes(script_bytes[5..9].try_into().unwrap());
+            let payload = script_bytes[9..].to_vec();
+            ExtendedScript::Extension(TzeData {
+                extension_id,
+                mode,
+                payload,
+            })
+        } else {
+            ExtendedScript::Bytecode(script)
+        }
+    }
+}
+
+impl From<Script> for ExtendedScript {
+    fn from(script: Script) -> Self {
+        ExtendedScript::Bytecode(script)
+    }
+}
+
+impl From<TzeData> for ExtendedScript {
+    fn from(tze_data: TzeData) -> Self {
+        ExtendedScript::Extension(tze_data)
+    }
+}
+
 /// A transparent input to a transaction.
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[cfg_attr(
@@ -164,7 +248,7 @@ pub enum Input {
         /// The previous output transaction reference.
         outpoint: OutPoint,
         /// The script that authorizes spending `outpoint`.
-        unlock_script: Script,
+        unlock_script: ExtendedScript,
         /// The sequence number for the output.
         sequence: u32,
     },
@@ -189,7 +273,16 @@ impl fmt::Display for Input {
             } => {
                 let mut fmter = f.debug_struct("transparent::Input::PrevOut");
 
-                fmter.field("unlock_script_len", &unlock_script.as_raw_bytes().len());
+                match unlock_script {
+                    ExtendedScript::Bytecode(script) => {
+                        fmter.field("unlock_script_len", &script.as_raw_bytes().len());
+                    }
+                    ExtendedScript::Extension(tze_data) => {
+                        fmter.field("tze_id", &tze_data.extension_id);
+                        fmter.field("tze_mode", &tze_data.mode);
+                        fmter.field("tze_witness_len", &tze_data.payload.len());
+                    }
+                }
                 fmter.field("outpoint", outpoint);
 
                 fmter.finish()
@@ -397,6 +490,19 @@ impl Input {
             self.value_from_outputs(&HashMap::new())
         }
     }
+
+    /// Returns true if this input is a TZE input.
+    pub fn is_tze(&self) -> bool {
+        matches!(self, Input::PrevOut { unlock_script, .. } if unlock_script.is_extension())
+    }
+
+    /// Returns the TZE data if this input is a TZE input.
+    pub fn tze_data(&self) -> Option<&TzeData> {
+        match self {
+            Input::PrevOut { unlock_script, .. } => unlock_script.try_as_extension(),
+            Input::Coinbase { .. } => None,
+        }
+    }
 }
 
 /// A transparent output from a transaction.
@@ -423,7 +529,19 @@ pub struct Output {
     pub value: Amount<NonNegative>,
 
     /// The lock script defines the conditions under which this output can be spent.
-    pub lock_script: Script,
+    pub lock_script: ExtendedScript,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[cfg_attr(any(test, feature = "proptest-impl"), derive(Arbitrary, Deserialize))]
+#[cfg_attr(
+    any(test, feature = "proptest-impl", feature = "elasticsearch"),
+    derive(Serialize)
+)]
+pub struct TzeData {
+    pub extension_id: u32,
+    pub mode: u32,
+    pub payload: Vec<u8>,
 }
 
 impl Output {
@@ -431,7 +549,7 @@ impl Output {
     pub fn new_coinbase(amount: Amount<NonNegative>, lock_script: Script) -> Output {
         Output {
             value: amount,
-            lock_script,
+            lock_script: lock_script.into(),
         }
     }
 
@@ -453,6 +571,21 @@ impl Output {
                 Some(Address::from_script_hash(net.t_addr_kind(), sh))
             }
         }
+    }
+
+    /// Returns true if this output is a TZE output.
+    pub fn is_tze(&self) -> bool {
+        self.lock_script.is_extension()
+    }
+
+    /// Returns the TZE data if this output is a TZE output.
+    pub fn tze_data(&self) -> Option<&TzeData> {
+        self.lock_script.try_as_extension()
+    }
+
+    /// Returns true if this output is a P2PK output.
+    pub fn is_p2pk(&self) -> bool {
+        matches!(&self.lock_script, ExtendedScript::Bytecode(script) if script.as_raw_bytes().first() == Some(&0x21))
     }
 }
 

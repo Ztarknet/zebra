@@ -1,6 +1,7 @@
 use hex::FromHex;
 use std::sync::Arc;
 use zebra_chain::{
+    block::Height,
     parameters::NetworkUpgrade,
     serialization::{ZcashDeserialize, ZcashDeserializeInto},
     transaction::Transaction,
@@ -21,12 +22,12 @@ fn verify_valid_script(nu: NetworkUpgrade, tx: &[u8], amount: u64, pubkey: &[u8]
     let transaction = tx.zcash_deserialize_into::<Arc<zebra_chain::transaction::Transaction>>()?;
     let output = transparent::Output {
         value: amount.try_into()?,
-        lock_script: transparent::Script::new(pubkey),
+        lock_script: transparent::Script::new(pubkey).into(),
     };
     let input_index = 0;
 
     let previous_output = Arc::new(vec![output]);
-    let verifier = super::CachedFfiTransaction::new(transaction, previous_output, nu)
+    let verifier = super::CachedFfiTransaction::new(transaction, previous_output, nu, Height(1))
         .expect("network upgrade should be valid for tx");
     verifier.is_valid(input_index)?;
 
@@ -66,13 +67,14 @@ fn fail_invalid_script() -> Result<()> {
     let amount = 211 * coin;
     let output = transparent::Output {
         value: amount.try_into()?,
-        lock_script: transparent::Script::new(&SCRIPT_PUBKEY.clone()[..]),
+        lock_script: transparent::Script::new(&SCRIPT_PUBKEY.clone()[..]).into(),
     };
     let input_index = 0;
     let verifier = super::CachedFfiTransaction::new(
         transaction,
         Arc::new(vec![output]),
         NetworkUpgrade::Blossom,
+        Height(1),
     )
     .expect("network upgrade should be valid for tx");
     verifier
@@ -92,13 +94,14 @@ fn reuse_script_verifier_pass_pass() -> Result<()> {
     let amount = 212 * coin;
     let output = transparent::Output {
         value: amount.try_into()?,
-        lock_script: transparent::Script::new(&SCRIPT_PUBKEY.clone()),
+        lock_script: transparent::Script::new(&SCRIPT_PUBKEY.clone()).into(),
     };
 
     let verifier = super::CachedFfiTransaction::new(
         transaction,
         Arc::new(vec![output]),
         NetworkUpgrade::Blossom,
+        Height(1),
     )
     .expect("network upgrade should be valid for tx");
 
@@ -118,7 +121,7 @@ fn reuse_script_verifier_pass_fail() -> Result<()> {
     let amount = 212 * coin;
     let output = transparent::Output {
         value: amount.try_into()?,
-        lock_script: transparent::Script::new(&SCRIPT_PUBKEY.clone()),
+        lock_script: transparent::Script::new(&SCRIPT_PUBKEY.clone()).into(),
     };
     let transaction =
         SCRIPT_TX.zcash_deserialize_into::<Arc<zebra_chain::transaction::Transaction>>()?;
@@ -127,6 +130,7 @@ fn reuse_script_verifier_pass_fail() -> Result<()> {
         transaction,
         Arc::new(vec![output]),
         NetworkUpgrade::Blossom,
+        Height(1),
     )
     .expect("network upgrade should be valid for tx");
 
@@ -148,7 +152,7 @@ fn reuse_script_verifier_fail_pass() -> Result<()> {
     let amount = 212 * coin;
     let output = transparent::Output {
         value: amount.try_into()?,
-        lock_script: transparent::Script::new(&SCRIPT_PUBKEY.clone()),
+        lock_script: transparent::Script::new(&SCRIPT_PUBKEY.clone()).into(),
     };
     let transaction =
         SCRIPT_TX.zcash_deserialize_into::<Arc<zebra_chain::transaction::Transaction>>()?;
@@ -157,6 +161,7 @@ fn reuse_script_verifier_fail_pass() -> Result<()> {
         transaction,
         Arc::new(vec![output]),
         NetworkUpgrade::Blossom,
+        Height(1),
     )
     .expect("network upgrade should be valid for tx");
 
@@ -178,7 +183,7 @@ fn reuse_script_verifier_fail_fail() -> Result<()> {
     let amount = 212 * coin;
     let output = transparent::Output {
         value: amount.try_into()?,
-        lock_script: transparent::Script::new(&SCRIPT_PUBKEY.clone()),
+        lock_script: transparent::Script::new(&SCRIPT_PUBKEY.clone()).into(),
     };
     let transaction =
         SCRIPT_TX.zcash_deserialize_into::<Arc<zebra_chain::transaction::Transaction>>()?;
@@ -187,6 +192,7 @@ fn reuse_script_verifier_fail_fail() -> Result<()> {
         transaction,
         Arc::new(vec![output]),
         NetworkUpgrade::Blossom,
+        Height(1),
     )
     .expect("network upgrade should be valid for tx");
 
@@ -220,6 +226,7 @@ fn p2sh() -> Result<()> {
         Arc::new(tx),
         Arc::new(vec![previous_output]),
         NetworkUpgrade::Nu5,
+        Height(1),
     )
     .expect("network upgrade should be valid for tx");
 
