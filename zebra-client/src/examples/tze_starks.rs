@@ -225,3 +225,19 @@ fn proof_data() -> (Vec<u8>, [u8; 32], [u8; 32], [u8; 32]) {
     let proof_data = include_bytes!("../../tests/fixtures/proof-sepolia-2725346.bz");
     (proof_data.to_vec(), initial_root, final_root, program_hash)
 }
+
+fn proof_data() -> (Vec<u8>, [u8; 32], [u8; 32], [u8; 32]) {
+    let initial_root: [u8; 32] =
+        hex::decode("07bea7a967f1c40fedf5dd92e8415facc2175e3e72a80f609901c33d2b2c1973")
+            .unwrap()
+            .try_into()
+            .unwrap();
+    let final_root: [u8; 32] =
+        hex::decode("051306f206bd001c17189d0ca0894c2f9aaaacc701e5122390f463655dccd613")
+            .unwrap()
+            .try_into()
+            .unwrap();
+    let program_hash: [u8; 32] = [0; 32];
+    let proof_data = include_bytes!("../../tests/fixtures/proof-sepolia-2725346.bz");
+    (proof_data.to_vec(), initial_root, final_root, program_hash)
+}

@@ -584,6 +584,10 @@ pub fn tze_extension_ids_consistent(
             .or_else(|| spent_utxos.get(&outpoint).cloned())
             .expect("load_spent_utxos_fut.await should return an error if a utxo is missing");
 
+        if !utxo.output.is_tze() {
+            return Err(TransactionError::TzeExtensionIdsNotConsistent);
+        }
+
         if utxo.output.tze_data().unwrap().extension_id != input.tze_data().unwrap().extension_id {
             return Err(TransactionError::TzeExtensionIdsNotConsistent);
         }
