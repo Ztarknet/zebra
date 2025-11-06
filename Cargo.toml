@@ -11,6 +11,7 @@ members = [
         "zebra-test",
         "zebra-utils",
         "zebra-client",
+        "zebra-prove",
         "tower-batch-control",
         "tower-fallback",
 ]
@@ -32,7 +33,7 @@ zcash_primitives = "0.26"
 zcash_proofs = "0.26"
 zcash_transparent = "0.6"
 zcash_protocol = "0.7"
-zcash_extensions = { git = "https://github.com/Ztarknet/librustzcash", rev = "c6ead76291de346822985dee58ad1cb8cdb51dcd" }
+zcash_extensions = { git = "https://github.com/Ztarknet/librustzcash", rev = "ad6e9206505ea2892a35217bd5dfc84f13129b07" }
 zip32 = "0.2"
 abscissa_core = "0.7"
 atty = "0.2.14"

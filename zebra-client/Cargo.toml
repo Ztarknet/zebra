@@ -2,6 +2,9 @@
 name = "zebra-client"
 edition = "2021"
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(zcash_unstable, values("nu7", "zfuture"))'] }
+
 [features]
 tx_v6 = ["zebra-chain/tx_v6", "zebra-rpc/tx_v6"]
 
@@ -25,3 +28,4 @@ hex = "0.4"
 tokio = { workspace = true, features = ["full", "test-util"] }
 async-trait = "0.1"
 rand_core = "0.6"
+serde_json = { workspace = true }
