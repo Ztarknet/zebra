@@ -58,85 +58,65 @@ pub struct OsOutputHeader {
     pub full_output: FieldElement,
 }
 
-/// Return BootloaderOutput and OsOutputHeader from proof public data
-pub fn get_program_hash_bootloader_and_os_output(
+pub struct ProofPublicData {
+    pub bootloader_program_hash: FieldElement,
+    pub os_program_hash: FieldElement,
+    pub initial_root: FieldElement,
+    pub final_root: FieldElement,
+}
+
+pub fn get_proof_public_data(
     proof: &CairoProof<Blake2sMerkleHasher>,
-) -> (FieldElement, BootloaderOutput, OsOutputHeader) {
+) -> Result<ProofPublicData> {
     let verification =
         get_verification_output(&proof.claim.public_data.public_memory);
     let public_output = verification.output;
+
+    // Deserialize OsOutputHeader (next 10 felts after bootloader wrapper)
+    if public_output.len() < 3 + 10 {
+        return Err(anyhow::anyhow!("Public output too short to contain bootloader wrapper and OS header (length: {}, needed: {})", public_output.len(), 3 + 10));
+    }
 
     let mut iter = public_output.iter();
     let bootloader_output = BootloaderOutput::deserialize(&mut iter);
     let os_header = OsOutputHeader::deserialize(&mut iter);
-    (verification.program_hash, bootloader_output, os_header)
+
+    let proof_public_data = ProofPublicData {
+        bootloader_program_hash: verification.program_hash,
+        os_program_hash: bootloader_output.task_program_hash,
+        initial_root: os_header.initial_root,
+        final_root: os_header.final_root,
+    };
+
+    Ok(proof_public_data)
 }
 
 /// Print proof public data including bootloader wrapper and OS output header
-pub fn print_proof_public_data(proof: &CairoProof<Blake2sMerkleHasher>) {
-    let verification =
-        get_verification_output(&proof.claim.public_data.public_memory);
-    let public_output = verification.output;
+pub fn print_proof_public_data(
+    proof: &CairoProof<Blake2sMerkleHasher>,
+) -> Result<ProofPublicData> {
+    let proof_public_data = get_proof_public_data(proof)?;
 
-    info!("=== Proof Public Output ===");
-    info!("Total public output length: {} felts", public_output.len());
-
-    let (program_hash, bootloader_output, os_header) =
-        get_program_hash_bootloader_and_os_output(proof);
-
-    // Deserialize OsOutputHeader (next 10 felts after bootloader wrapper)
-    if public_output.len() < 3 + 10 {
-        info!(
-            "Warning: Public output too short to contain full OS header (length: {}, needed: {})",
-            public_output.len(),
-            3 + 10
-        );
-        return;
-    }
-
-    info!("-- Bootloader Output ---");
-    info!("  bootloader_hash:           0x{:x}", program_hash);
+    info!("=== Proof Public Data ===");
     info!(
-        " os_program_hash:           0x{:x}",
-        bootloader_output.task_program_hash
-    );
-
-    info!("--- OsOutputHeader (Task Result) ---");
-    info!("  initial_root:            0x{:x}", os_header.initial_root);
-    info!("  final_root:              0x{:x}", os_header.final_root);
-    info!(
-        "  prev_block_number:       {} (0x{:x})",
-        os_header.prev_block_number, os_header.prev_block_number
-    );
-    info!(
-        "  new_block_number:        {} (0x{:x})",
-        os_header.new_block_number, os_header.new_block_number
-    );
-    info!(
-        "  prev_block_hash:         0x{:x}",
-        os_header.prev_block_hash
-    );
-    info!(
-        "  new_block_hash:          0x{:x}",
-        os_header.new_block_hash
+        "  bootloader_program_hash: 0x{:x}",
+        proof_public_data.bootloader_program_hash
     );
     info!(
         "  os_program_hash:         0x{:x}",
-        os_header.os_program_hash
+        proof_public_data.os_program_hash
     );
     info!(
-        "  starknet_os_config_hash: 0x{:x}",
-        os_header.starknet_os_config_hash
+        "  initial_root:            0x{:x}",
+        proof_public_data.initial_root
     );
     info!(
-        "  use_kzg_da:              {} (0x{:x})",
-        os_header.use_kzg_da, os_header.use_kzg_da
+        "  final_root:              0x{:x}",
+        proof_public_data.final_root
     );
-    info!(
-        "  full_output:             {} (0x{:x})",
-        os_header.full_output, os_header.full_output
-    );
-    info!("--- End Header ---");
+    info!("=== End Proof Public Data ===");
+
+    Ok(proof_public_data)
 }
 
 /// Load proof from JSON file
@@ -193,7 +173,7 @@ pub fn load_proof_from_compressed_bincode(
 /// Loads a proof from disk and prints its public output.
 /// Supports both JSON format (from stwo_run_and_prove) and compressed bincode
 /// format (.bz).
-pub fn load_and_print_proof(proof_file: &Path) -> Result<()> {
+pub fn load_and_print_proof(proof_file: &Path) -> Result<ProofPublicData> {
     info!("Loading proof from: {}", proof_file.display());
 
     // Detect file format based on extension
@@ -219,6 +199,5 @@ pub fn load_and_print_proof(proof_file: &Path) -> Result<()> {
     };
 
     info!("Proof loaded successfully!");
-    print_proof_public_data(&proof);
-    Ok(())
+    print_proof_public_data(&proof)
 }
