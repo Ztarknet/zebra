@@ -392,7 +392,6 @@ async fn execute_sync(
 
     // Get network configuration
     let network_config = network.config();
-    let network_name = network.as_str();
 
     // Step 1: Create Starknet Provider client
     info!("Connecting to Starknet RPC: {}", network_config.rpc_url);
@@ -445,7 +444,7 @@ async fn execute_sync(
             format!("0x{:x}", proof_public_data.bootloader_program_hash);
         let os_program_hash =
             format!("0x{:x}", proof_public_data.os_program_hash);
-        let initial_root = format!("0x{:x}", proof_public_data.initial_root);
+        let initial_root = format!("0x{:x}", proof_public_data.final_root);
 
         info!("Bootloader Program Hash: {}", bootloader_program_hash);
         info!("OS Program Hash: {}", os_program_hash);
