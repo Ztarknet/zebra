@@ -32,6 +32,8 @@ stwo = { git = "https://github.com/starkware-libs/stwo", rev = "411d8c6", featur
 ], default-features = false }
 stwo-cairo-serialize = { git = "https://github.com/starkware-libs/stwo-cairo", rev = "f57087fe5ce57e6ffe5b9c42e08038f60b3b12f4" }
 starknet-ff = "0.3"
+starknet-providers = "0.16"
+url = "2"
 bincode = "1"
 bzip2 = "0.4"
 rand_core = "0.6"

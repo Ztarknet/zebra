@@ -33,3 +33,4 @@ target
 /sequencer_venv
 
 proof*.bz
+sync-state.json

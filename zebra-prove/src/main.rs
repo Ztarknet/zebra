@@ -4,8 +4,10 @@ use hex::FromHex;
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use starknet_ff::FieldElement;
+use starknet_providers::jsonrpc::{HttpTransport, JsonRpcClient};
+use starknet_providers::Provider;
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use zcash_primitives::transaction::TxId;
 use zcash_protocol::value::Zatoshis;
 use zebra_chain::transaction::{zip317, Hash};
@@ -35,6 +37,15 @@ pub struct WalletConfig {
     pub mnemonic: String,
 }
 
+/// Sync state stored in JSON file
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SyncState {
+    /// Last block number that was synced
+    pub last_synced_block: u64,
+    /// Transaction ID of the last state update (None for first sync)
+    pub previous_txid: Option<String>,
+}
+
 /// Load wallet from file or use default regtest wallet
 fn load_wallet(path: PathBuf) -> Result<Wallet<RegtestNetwork>> {
     info!("Loading wallet from: {}", path.display());
@@ -47,6 +58,39 @@ fn load_wallet(path: PathBuf) -> Result<Wallet<RegtestNetwork>> {
         Wallet::from_mnemonic(&wallet_config.mnemonic, REGTEST_NETWORK);
     info!("Wallet loaded from file");
     Ok(wallet)
+}
+
+/// Create Starknet Provider client from RPC URL
+fn create_starknet_provider(
+    rpc_url: &str,
+) -> Result<JsonRpcClient<HttpTransport>> {
+    let url =
+        url::Url::parse(rpc_url).context("Failed to parse Starknet RPC URL")?;
+    Ok(JsonRpcClient::new(HttpTransport::new(url)))
+}
+
+/// Load sync state from JSON file, or create default if it doesn't exist
+fn load_sync_state(path: &Path) -> Result<SyncState> {
+    if path.exists() {
+        let content = std::fs::read_to_string(path)
+            .context("Failed to read sync state file")?;
+        let state: SyncState = serde_json::from_str(&content)
+            .context("Failed to parse sync state JSON")?;
+        Ok(state)
+    } else {
+        Ok(SyncState {
+            last_synced_block: 0,
+            previous_txid: None,
+        })
+    }
+}
+
+/// Save sync state to JSON file
+fn save_sync_state(path: &Path, state: &SyncState) -> Result<()> {
+    let content = serde_json::to_string_pretty(state)
+        .context("Failed to serialize sync state")?;
+    std::fs::write(path, content).context("Failed to write sync state file")?;
+    Ok(())
 }
 
 /// Execute the generate command: generate PIE and create proof
@@ -246,8 +290,9 @@ async fn execute_send_state_update(
     info!("=== Send Transaction to Zebra Node ===");
     let wallet = load_wallet(wallet_path)?;
 
-    let previous_tx_id =
-        TxId::from_bytes(Hash::from_hex(previous_txid)?.into());
+    // Strip "0x" prefix if present
+    let txid_hex = previous_txid.strip_prefix("0x").unwrap_or(&previous_txid);
+    let previous_tx_id = TxId::from_bytes(Hash::from_hex(txid_hex)?.into());
 
     // Display wallet address
     let key = wallet.derive_key(0, 0);
@@ -327,6 +372,181 @@ async fn execute_send_state_update(
     info!("Command completed successfully!");
 
     Ok(tx.hash())
+}
+
+/// Execute the sync command: sync Starknet state updates to Zebra
+async fn execute_sync(
+    wallet_path: PathBuf,
+    zebra_address: String,
+    network: Network,
+    state_file: PathBuf,
+    init_block: Option<u64>,
+    max_blocks: u64,
+    output_dir: PathBuf,
+    program: PathBuf,
+    prover_params: PathBuf,
+    fee: u64,
+    verbose: bool,
+) -> Result<()> {
+    info!("=== Sync Starknet State Updates to Zebra ===");
+
+    // Get network configuration
+    let network_config = network.config();
+    let network_name = network.as_str();
+
+    // Step 1: Create Starknet Provider client
+    info!("Connecting to Starknet RPC: {}", network_config.rpc_url);
+    let provider = create_starknet_provider(network_config.rpc_url)?;
+
+    // Step 2: Get current block number
+    info!("Getting current block number from Starknet...");
+    let current_block = provider
+        .block_number()
+        .await
+        .context("Failed to get block number from Starknet provider")?;
+    info!("Current Starknet block: {}", current_block);
+
+    // Step 3: Load sync state
+    info!("Loading sync state from: {}", state_file.display());
+    let mut sync_state = load_sync_state(&state_file)?;
+
+    // Step 4: Handle initialization if needed
+    if sync_state.previous_txid.is_none() {
+        info!("=== Initialization Required ===");
+
+        // Determine initialization block
+        let init_block_num = init_block.unwrap_or(current_block);
+        info!("Using initialization block: {}", init_block_num);
+
+        // Generate proof for initialization block
+        info!(
+            "Generating proof for initialization block {}...",
+            init_block_num
+        );
+        let init_proof_path = execute_generate(
+            init_block_num.to_string(),
+            output_dir.clone(),
+            program.clone(),
+            prover_params.clone(),
+            false, // don't keep intermediate files
+            network.clone(),
+            verbose,
+        )
+        .await
+        .context("Failed to generate initialization proof")?;
+
+        // Load proof and extract public data
+        info!("Extracting initialization data from proof...");
+        let proof = load_proof_from_compressed_bincode(&init_proof_path)?;
+        let proof_public_data = get_proof_public_data(&proof)?;
+
+        // Convert FieldElements to hex strings
+        let bootloader_program_hash =
+            format!("0x{:x}", proof_public_data.bootloader_program_hash);
+        let os_program_hash =
+            format!("0x{:x}", proof_public_data.os_program_hash);
+        let initial_root = format!("0x{:x}", proof_public_data.initial_root);
+
+        info!("Bootloader Program Hash: {}", bootloader_program_hash);
+        info!("OS Program Hash: {}", os_program_hash);
+        info!("Initial Root: {}", initial_root);
+
+        // Call execute_initialize
+        info!("Initializing state on Zebra node...");
+        let init_tx_hash = execute_initialize(
+            wallet_path.clone(),
+            bootloader_program_hash,
+            os_program_hash,
+            initial_root,
+            zebra_address.clone(),
+            false, // always execute, never dry run
+            fee,
+        )
+        .await
+        .context("Failed to initialize state on Zebra node")?;
+
+        // Update sync state
+        sync_state.last_synced_block = init_block_num;
+        sync_state.previous_txid = Some(format!("0x{}", init_tx_hash));
+        save_sync_state(&state_file, &sync_state)
+            .context("Failed to save sync state after initialization")?;
+
+        info!(
+            "✓ Initialization completed. Transaction hash: 0x{}",
+            init_tx_hash
+        );
+    }
+
+    // Step 5: Calculate block range to sync
+    let start_block = sync_state.last_synced_block + 1;
+    let end_block =
+        std::cmp::min(current_block, sync_state.last_synced_block + max_blocks);
+
+    if start_block > end_block {
+        info!(
+            "No new blocks to sync. Last synced: {}, Current: {}",
+            sync_state.last_synced_block, current_block
+        );
+        return Ok(());
+    }
+
+    info!(
+        "Syncing blocks {} to {} ({} blocks)",
+        start_block,
+        end_block,
+        end_block - start_block + 1
+    );
+
+    // Step 6: Generate proof for block range
+    let block_range_str = format!("{}-{}", start_block, end_block);
+    info!("Generating proof for block range: {}", block_range_str);
+    let proof_path = execute_generate(
+        block_range_str.clone(),
+        output_dir.clone(),
+        program.clone(),
+        prover_params.clone(),
+        false, // don't keep intermediate files
+        network.clone(),
+        verbose,
+    )
+    .await
+    .context("Failed to generate proof for block range")?;
+
+    // Step 7: Send state update
+    let previous_txid = sync_state
+        .previous_txid
+        .as_ref()
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "Previous transaction ID is missing from sync state"
+            )
+        })?
+        .clone();
+
+    info!("Sending state update transaction...");
+    let update_tx_hash = execute_send_state_update(
+        wallet_path.clone(),
+        proof_path,
+        previous_txid,
+        zebra_address.clone(),
+        false, // always execute, never dry run
+        fee,
+    )
+    .await
+    .context("Failed to send state update transaction")?;
+
+    // Step 8: Update sync state
+    sync_state.last_synced_block = end_block;
+    sync_state.previous_txid = Some(format!("0x{}", update_tx_hash));
+    save_sync_state(&state_file, &sync_state)
+        .context("Failed to save sync state after update")?;
+
+    info!("✓ Sync completed successfully!");
+    info!("  Synced blocks: {} to {}", start_block, end_block);
+    info!("  Transaction hash: 0x{}", update_tx_hash);
+    info!("  Last synced block: {}", sync_state.last_synced_block);
+
+    Ok(())
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -483,6 +703,51 @@ enum Commands {
         #[arg(long, default_value = "10000")]
         fee: u64,
     },
+    /// Sync Starknet state updates to Zebra node
+    Sync {
+        /// Path to wallet file (JSON with mnemonic)
+        #[arg(short, long, default_value = "wallet.json")]
+        wallet_path: PathBuf,
+
+        /// Zebra node RPC address (IP:port)
+        #[arg(long, default_value = "35.232.122.237:18232")]
+        zebra_address: String,
+
+        /// Network (sepolia or mainnet)
+        #[arg(short, long, default_value = "sepolia")]
+        network: Network,
+
+        /// Path to sync state JSON file
+        #[arg(long, default_value = "sync-state.json")]
+        state_file: PathBuf,
+
+        /// Block number to initialize with if state file doesn't exist
+        #[arg(long)]
+        init_block: Option<u64>,
+
+        /// Maximum blocks to sync per run
+        #[arg(long, default_value = "5")]
+        max_blocks: u64,
+
+        /// Output directory for generated files
+        #[arg(short, long, default_value = "./output")]
+        output_dir: PathBuf,
+
+        /// Path to bootloader program JSON file
+        #[arg(
+            long,
+            default_value = "bootloaders/simple_bootloader_compiled.json"
+        )]
+        program: PathBuf,
+
+        /// Path to prover parameters JSON file
+        #[arg(long, default_value = "prover_params.json")]
+        prover_params: PathBuf,
+
+        /// Transaction fee in zatoshis
+        #[arg(long, default_value = "10000")]
+        fee: u64,
+    },
 }
 
 #[tokio::main]
@@ -558,6 +823,33 @@ async fn main() -> anyhow::Result<()> {
                 zebra_address,
                 dry_run,
                 fee,
+            )
+            .await?;
+        }
+        Commands::Sync {
+            wallet_path,
+            zebra_address,
+            network,
+            state_file,
+            init_block,
+            max_blocks,
+            output_dir,
+            program,
+            prover_params,
+            fee,
+        } => {
+            execute_sync(
+                wallet_path,
+                zebra_address,
+                network,
+                state_file,
+                init_block,
+                max_blocks,
+                output_dir,
+                program,
+                prover_params,
+                fee,
+                cli.verbose,
             )
             .await?;
         }
