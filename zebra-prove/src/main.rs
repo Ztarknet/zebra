@@ -567,6 +567,7 @@ struct NetworkConfig {
     rpc_url: &'static str,
     strk_fee_token: &'static str,
     eth_fee_token: &'static str,
+    madara_chain_id: &'static str,
 }
 
 impl Network {
@@ -577,28 +578,27 @@ impl Network {
                 strk_fee_token:
                     "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d",
                 eth_fee_token: "0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7",
+                madara_chain_id: "SN_MAINNET",
             },
             Network::Mainnet => NetworkConfig {
                 rpc_url: "https://pathfinder-mainnet.d.karnot.xyz",
                 strk_fee_token:
                     "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d",
                 eth_fee_token: "0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7",
+                madara_chain_id: "SN_SEPOLIA",
             },
             Network::Ztarknet => NetworkConfig {
                 rpc_url: "https://ztarknet-pathfinder.d.karnot.xyz",
                 strk_fee_token:
                     "0x1ad102b4c4b3e40a51b6fb8a446275d600555bd63a95cdceed3e5cef8a6bc1d",
                 eth_fee_token: "0x1ad102b4c4b3e40a51b6fb8a446275d600555bd63a95cdceed3e5cef8a6bc1d",
+                madara_chain_id: "SN_SEPOLIA",
             },
         }
     }
 
     fn as_str(&self) -> &'static str {
-        match self {
-            Network::Sepolia => "sepolia",
-            Network::Mainnet => "mainnet",
-            Network::Ztarknet => "ztarknet",
-        }
+        self.config().madara_chain_id
     }
 }
 
