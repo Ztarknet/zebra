@@ -523,6 +523,7 @@ async fn execute_sync(
         .clone();
 
     info!("Sending state update transaction...");
+    let proof_path_clone = proof_path.clone();
     let update_tx_hash = execute_send_state_update(
         wallet_path.clone(),
         proof_path,
@@ -540,6 +541,13 @@ async fn execute_sync(
     save_sync_state(&state_file, &sync_state)
         .context("Failed to save sync state after update")?;
 
+    // Remove proof file after successful state update
+    if proof_path_clone.exists() {
+        std::fs::remove_file(&proof_path_clone).context(
+            "Failed to remove proof file after successful state update",
+        )?;
+    }
+
     info!("✓ Sync completed successfully!");
     info!("  Synced blocks: {} to {}", start_block, end_block);
     info!("  Transaction hash: 0x{}", update_tx_hash);
@@ -552,6 +560,7 @@ async fn execute_sync(
 enum Network {
     Sepolia,
     Mainnet,
+    Ztarknet,
 }
 
 struct NetworkConfig {
@@ -575,6 +584,12 @@ impl Network {
                     "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d",
                 eth_fee_token: "0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7",
             },
+            Network::Ztarknet => NetworkConfig {
+                rpc_url: "https://ztarknet-pathfinder.d.karnot.xyz",
+                strk_fee_token:
+                    "0x1ad102b4c4b3e40a51b6fb8a446275d600555bd63a95cdceed3e5cef8a6bc1d",
+                eth_fee_token: "0x1ad102b4c4b3e40a51b6fb8a446275d600555bd63a95cdceed3e5cef8a6bc1d",
+            },
         }
     }
 
@@ -582,6 +597,7 @@ impl Network {
         match self {
             Network::Sepolia => "sepolia",
             Network::Mainnet => "mainnet",
+            Network::Ztarknet => "ztarknet",
         }
     }
 }

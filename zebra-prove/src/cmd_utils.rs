@@ -112,9 +112,10 @@ pub fn execute_with_streaming_output(
 
     if !status.success() {
         return Err(anyhow::anyhow!(
-            "{} failed with exit code: {}",
+            "{} failed with exit code: {}\nCaptured stderr:\n{}",
             command_name,
-            status.code().unwrap_or(-1)
+            status.code().unwrap_or(-1),
+            captured_stderr
         ));
     }
 
