@@ -42,8 +42,12 @@ pub struct WalletConfig {
 pub struct SyncState {
     /// Last block number that was synced
     pub last_synced_block: u64,
-    /// Transaction ID of the last state update (None for first sync)
-    pub previous_txid: Option<String>,
+    /// Transaction ID of the last state update (empty string for first sync)
+    #[serde(default)]
+    pub previous_txid: String,
+    /// History of all transactions sent during sync
+    #[serde(default)]
+    pub transaction_history: Vec<String>,
 }
 
 /// Load wallet from file or use default regtest wallet
@@ -69,19 +73,16 @@ fn create_starknet_provider(
     Ok(JsonRpcClient::new(HttpTransport::new(url)))
 }
 
-/// Load sync state from JSON file, or create default if it doesn't exist
-fn load_sync_state(path: &Path) -> Result<SyncState> {
+/// Load sync state from JSON file
+fn load_sync_state(path: &Path) -> Result<Option<SyncState>> {
     if path.exists() {
         let content = std::fs::read_to_string(path)
             .context("Failed to read sync state file")?;
         let state: SyncState = serde_json::from_str(&content)
             .context("Failed to parse sync state JSON")?;
-        Ok(state)
+        Ok(Some(state))
     } else {
-        Ok(SyncState {
-            last_synced_block: 0,
-            previous_txid: None,
-        })
+        Ok(None)
     }
 }
 
@@ -374,6 +375,47 @@ async fn execute_send_state_update(
     Ok(tx.hash())
 }
 
+/// Check if a previous transaction is included in a block
+/// Returns Ok(true) if the transaction is in a block, Ok(false) if it's still
+/// in mempool
+async fn check_previous_transaction_in_block(
+    zebra_address: &str,
+    previous_txid: &str,
+) -> Result<bool> {
+    // Parse socket address and create RPC client
+    let socket_addr: SocketAddr = zebra_address
+        .parse()
+        .context("Invalid Zebra address format (expected IP:port)")?;
+    let rpc_client = RpcRequestClient::new(socket_addr);
+
+    // Parse previous transaction ID
+    let txid_hex = previous_txid.strip_prefix("0x").unwrap_or(previous_txid);
+    let previous_tx_id = TxId::from_bytes(Hash::from_hex(txid_hex)?.into());
+
+    // Get transaction with verbose=1 to check if it's in a block
+    match rpc_client.get_raw_transaction(&previous_tx_id).await {
+        Ok(zebra_rpc::methods::GetRawTransactionResponse::Object(tx_obj)) => {
+            // Transaction exists, check if it's in a block
+            Ok(tx_obj.height().is_some())
+        }
+        Ok(zebra_rpc::methods::GetRawTransactionResponse::Raw(_)) => {
+            // Raw format doesn't have height info - this is unexpected
+            Err(anyhow::anyhow!(
+                "Received raw transaction format for {}, cannot check block inclusion. Expected verbose format.",
+                previous_txid
+            ))
+        }
+        Err(e) => {
+            // Transaction not found or error fetching - return error
+            Err(anyhow::anyhow!(
+                "Failed to get previous transaction {}: {}",
+                previous_txid,
+                e
+            ))
+        }
+    }
+}
+
 /// Execute the sync command: sync Starknet state updates to Zebra
 async fn execute_sync(
     wallet_path: PathBuf,
@@ -407,10 +449,11 @@ async fn execute_sync(
 
     // Step 3: Load sync state
     info!("Loading sync state from: {}", state_file.display());
-    let mut sync_state = load_sync_state(&state_file)?;
-
-    // Step 4: Handle initialization if needed
-    if sync_state.previous_txid.is_none() {
+    let mut sync_state = if let Some(state) = load_sync_state(&state_file)? {
+        // State exists, use it
+        state
+    } else {
+        // Step 4: Initialize state (no state file exists)
         info!("=== Initialization Required ===");
 
         // Determine initialization block
@@ -464,16 +507,42 @@ async fn execute_sync(
         .await
         .context("Failed to initialize state on Zebra node")?;
 
-        // Update sync state
-        sync_state.last_synced_block = init_block_num;
-        sync_state.previous_txid = Some(format!("0x{}", init_tx_hash));
-        save_sync_state(&state_file, &sync_state)
+        // Create initial sync state
+        let state = SyncState {
+            last_synced_block: init_block_num,
+            previous_txid: format!("0x{}", init_tx_hash),
+            transaction_history: vec![format!("0x{}", init_tx_hash)],
+        };
+
+        save_sync_state(&state_file, &state)
             .context("Failed to save sync state after initialization")?;
 
         info!(
             "✓ Initialization completed. Transaction hash: 0x{}",
             init_tx_hash
         );
+
+        state
+    };
+
+    // Step 4.5: Check if previous transaction is already included in a block
+    if !sync_state.previous_txid.is_empty() {
+        info!("Checking if previous transaction is included in a block...");
+
+        // Check if previous transaction is in a block
+        let is_in_block = check_previous_transaction_in_block(
+            &zebra_address,
+            &sync_state.previous_txid,
+        )
+        .await?;
+
+        if !is_in_block {
+            info!(
+                "Previous transaction {} is not yet included in a block (still in mempool). Exiting.",
+                sync_state.previous_txid
+            );
+            return Ok(());
+        }
     }
 
     // Step 5: Calculate block range to sync
@@ -512,15 +581,7 @@ async fn execute_sync(
     .context("Failed to generate proof for block range")?;
 
     // Step 7: Send state update
-    let previous_txid = sync_state
-        .previous_txid
-        .as_ref()
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "Previous transaction ID is missing from sync state"
-            )
-        })?
-        .clone();
+    let previous_txid = sync_state.previous_txid.clone();
 
     info!("Sending state update transaction...");
     let proof_path_clone = proof_path.clone();
@@ -537,7 +598,21 @@ async fn execute_sync(
 
     // Step 8: Update sync state
     sync_state.last_synced_block = end_block;
-    sync_state.previous_txid = Some(format!("0x{}", update_tx_hash));
+    sync_state.previous_txid = format!("0x{}", update_tx_hash);
+
+    // Add to transaction history
+    sync_state
+        .transaction_history
+        .push(format!("0x{}", update_tx_hash));
+
+    // Limit transaction history to 100 entries (keep most recent)
+    const MAX_HISTORY: usize = 100;
+    if sync_state.transaction_history.len() > MAX_HISTORY {
+        sync_state.transaction_history = sync_state
+            .transaction_history
+            .split_off(sync_state.transaction_history.len() - MAX_HISTORY);
+    }
+
     save_sync_state(&state_file, &sync_state)
         .context("Failed to save sync state after update")?;
 
