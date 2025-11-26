@@ -34,3 +34,4 @@ target
 
 proof*.bz
 sync-state.json
+log/

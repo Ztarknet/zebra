@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use log::{info, warn};
+use log::info;
 use rand_core::OsRng;
 use starknet_ff::FieldElement;
 use zcash_extensions::transparent::stark_verify::stark_verify::ProofFormat;
@@ -58,10 +58,8 @@ pub async fn get_fee_outpoint(
         mature_utxos[0]
     };
 
-    // Convert zebra transaction hash to TxId (reverse byte order)
-    let fee_txid_bytes: Vec<u8> = utxo.txid().0.iter().copied().collect();
-    let fee_txid = TxId::read(&fee_txid_bytes[..])
-        .context("Failed to parse TxId from UTXO")?;
+    // Convert zebra transaction hash to TxId (use from_bytes, not read)
+    let fee_txid = TxId::from_bytes(utxo.txid().0);
 
     let fee_outpoint =
         OutPoint::new(fee_txid.into(), utxo.output_index().index());
@@ -92,6 +90,13 @@ pub async fn get_previous_prevout(
         .await
         .context("Failed to get TZE transaction")?;
 
+    // Calculate the number of transparent outputs
+    let num_transparent_outputs =
+        tze_tx.transparent_bundle().map_or(0, |b| b.vout.len()) as u32;
+
+    // Adjust the index to be absolute (Transparent count + TZE relative index)
+    let absolute_tze_index = TZE_VOUT_INDEX + num_transparent_outputs;
+
     let tze_output = tze_tx
         .tze_bundle()
         .ok_or_else(|| anyhow::anyhow!("TZE transaction has no TZE bundle"))?
@@ -106,7 +111,7 @@ pub async fn get_previous_prevout(
         .clone();
 
     let tze_prevout =
-        (tze::OutPoint::new(tze_txid, TZE_VOUT_INDEX), tze_output);
+        (tze::OutPoint::new(tze_txid, absolute_tze_index), tze_output);
 
     Ok(tze_prevout)
 }
@@ -220,17 +225,6 @@ pub async fn build_state_update_tx<P: Parameters>(
 
     let fee_rule = FeeRule::non_standard(fee);
     let prover = LocalTxProver::bundled();
-
-    // TODO: Seems like ugly hack, but it works.
-    warn!(
-        "Overriding TZE output index from {} to {}",
-        tze_prevout.0.n(),
-        1
-    );
-    let tze_prevout = (
-        tze::OutPoint::new(tze_prevout.0.txid().clone(), 1),
-        tze_prevout.1,
-    );
 
     builder
         .add_stark_verify_input(

@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
-use hex::FromHex;
+use hex::{FromHex, ToHex};
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use starknet_ff::FieldElement;
@@ -19,6 +19,7 @@ use zebra_node_services::rpc_client::RpcRequestClient;
 
 mod cmd_utils;
 mod generate_pie;
+mod logging;
 mod proof_utils;
 mod stwo_run_and_prove;
 mod transactions;
@@ -255,6 +256,23 @@ async fn execute_initialize(
 
     info!("Transaction built successfully!");
 
+    // Log outpoints used in transaction inputs
+    info!("Transaction inputs:");
+    for (idx, input) in tx.inputs().iter().enumerate() {
+        if let Some(outpoint) = input.outpoint() {
+            let input_type = if input.is_tze() { "TZE" } else { "transparent" };
+            info!(
+                "  Input {}: {} outpoint {}:{}",
+                idx,
+                input_type,
+                outpoint.hash.encode_hex::<String>(),
+                outpoint.index
+            );
+        } else {
+            info!("  Input {}: coinbase", idx);
+        }
+    }
+
     let conventional_fee = zip317::conventional_fee(&tx);
     let conventional_fee_u64: u64 = conventional_fee.into();
     if fee < conventional_fee_u64 {
@@ -350,6 +368,23 @@ async fn execute_send_state_update(
 
     info!("Transaction built successfully");
 
+    // Log outpoints used in transaction inputs
+    info!("Transaction inputs:");
+    for (idx, input) in tx.inputs().iter().enumerate() {
+        if let Some(outpoint) = input.outpoint() {
+            let input_type = if input.is_tze() { "TZE" } else { "transparent" };
+            info!(
+                "  Input {}: {} outpoint {}:{}",
+                idx,
+                input_type,
+                outpoint.hash.encode_hex::<String>(),
+                outpoint.index
+            );
+        } else {
+            info!("  Input {}: coinbase", idx);
+        }
+    }
+
     let conventional_fee = zip317::conventional_fee(&tx);
     let conventional_fee_u64: u64 = conventional_fee.into();
     if fee < conventional_fee_u64 {
@@ -440,7 +475,6 @@ async fn execute_sync(
     let provider = create_starknet_provider(network_config.rpc_url)?;
 
     // Step 2: Get current block number
-    info!("Getting current block number from Starknet...");
     let current_block = provider
         .block_number()
         .await
@@ -448,7 +482,6 @@ async fn execute_sync(
     info!("Current Starknet block: {}", current_block);
 
     // Step 3: Load sync state
-    info!("Loading sync state from: {}", state_file.display());
     let mut sync_state = if let Some(state) = load_sync_state(&state_file)? {
         // State exists, use it
         state
@@ -527,8 +560,6 @@ async fn execute_sync(
 
     // Step 4.5: Check if previous transaction is already included in a block
     if !sync_state.previous_txid.is_empty() {
-        info!("Checking if previous transaction is included in a block...");
-
         // Check if previous transaction is in a block
         let is_in_block = check_previous_transaction_in_block(
             &zebra_address,
@@ -844,14 +875,16 @@ enum Commands {
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    // Initialize logging
-    env_logger::Builder::from_default_env()
-        .filter_level(if cli.verbose {
-            log::LevelFilter::Debug
-        } else {
-            log::LevelFilter::Info
-        })
-        .init();
+    let log_level = if cli.verbose {
+        log::LevelFilter::Debug
+    } else {
+        log::LevelFilter::Info
+    };
+
+    if let Err(e) = logging::setup(log_level) {
+        eprintln!("Error initializing logging: {}", e);
+        std::process::exit(1);
+    }
 
     match cli.command {
         Commands::Generate {
