@@ -6,7 +6,8 @@ use std::process::Command;
 use crate::cmd_utils::execute_with_streaming_output;
 
 const SNOS_REPO_URL: &str = "https://github.com/keep-starknet-strange/snos";
-const SNOS_REPO_REV: &str = "44e82ff35277fdc102a5613975e02975a2b111e4";
+// branch: dynamic_charge_fee_fix
+const SNOS_REPO_REV: &str = "0d8f2846c25e2ee8da981fee7fcf36012fe86549";
 
 /// Generate PIE using snos generate-pie binary
 ///
@@ -64,11 +65,6 @@ pub async fn generate_pie(
         .env("SNOS_OUTPUT", output_path.to_string_lossy().as_ref());
 
     debug!("Running command: {:?}", cmd);
-    debug!("Environment variables set:");
-    debug!("  SNOS_RPC_URL={}", rpc_url);
-    debug!("  SNOS_NETWORK={}", network);
-    debug!("  SNOS_BLOCKS={}", block_range);
-    debug!("  SNOS_OUTPUT={}", output_path.display());
 
     let (elapsed, stderr_output) =
         execute_with_streaming_output(&mut cmd, "generate-pie", verbose)?;
