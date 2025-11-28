@@ -1,11 +1,11 @@
 {
     "channel_hash": "blake2s",
     "pcs_config": {
-        "pow_bits": 26,
+        "pow_bits": 27,
         "fri_config": {
             "log_last_layer_degree_bound": 0,
-            "log_blowup_factor": 2,
-            "n_queries": 35
+            "log_blowup_factor": 3,
+            "n_queries": 23
         }
     },
     "preprocessed_trace": "canonical"

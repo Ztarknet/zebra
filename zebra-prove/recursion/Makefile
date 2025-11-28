@@ -35,3 +35,12 @@ prove-step-2:
 		--proofs_dir target \
 		--proof-format cairo-serde \
 		--verify
+
+prove-step-3:
+	stwo_run_and_prove \
+		--program ../bootloaders/simple_bootloader_compiled.json \
+		--program_input program_input_step_3.json \
+		--prover_params_json prover_params_step_3.json \
+		--proofs_dir target \
+		--proof-format cairo-serde \
+		--verify
