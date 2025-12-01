@@ -1,9 +1,9 @@
 STWO_CAIRO_REV=f57087fe5ce57e6ffe5b9c42e08038f60b3b12f4
-PROVING_UTILS_REV=1cc94dcaa6922c197430a0bfad27cc80c22056e0
+PROVING_UTILS_REV=efbaeebfdce3463aa61e16d7d8e6069f03df0994
 
 install-stwo-run-and-prove:
 	cargo +nightly-2025-07-14 install \
-		--git ssh://git@github.com/starkware-libs/proving-utils.git \
+		--git ssh://git@github.com/m-kus/proving-utils.git \
 		--rev $(PROVING_UTILS_REV) \
 		stwo_run_and_prove --force
 
